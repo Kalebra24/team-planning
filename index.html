@@ -907,6 +907,150 @@
   /* Tooltip */
   [data-tip] { position: relative; }
 
+  /* Segmented toggle */
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .seg button {
+    border: 0;
+    background: transparent;
+    padding: 5px 12px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .seg button:hover { color: var(--ink); }
+  .seg button.active { background: var(--ink); color: var(--bg); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.active + button { border-left-color: var(--ink); }
+
+  /* Toggle inline */
+  .toggle-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink);
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-inline input { margin: 0; cursor: pointer; }
+
+  /* Modo Mostrar Mensais – track e barra mais altos para inputs */
+  .gantt.monthly-mode .gantt-track { height: 36px; }
+  .gantt.monthly-mode .gantt-bar {
+    height: 32px;
+    top: 2px;
+    cursor: default;
+    padding: 0;
+    overflow: visible;
+    gap: 0;
+  }
+  .gantt.monthly-mode .gantt-bar:hover { filter: none; box-shadow: 0 0 0 1px var(--ink); }
+  .gantt.monthly-mode .gantt-bar .gb-handle { display: none; }
+  .gantt.monthly-mode .gantt-bar .gb-name {
+    position: absolute;
+    top: -16px;
+    left: 0;
+    color: var(--ink);
+    font-size: 10px;
+    font-weight: 500;
+    pointer-events: none;
+    white-space: nowrap;
+    text-shadow: 0 0 4px var(--bg), 0 0 4px var(--bg);
+    z-index: 2;
+  }
+  .gantt.monthly-mode .gantt-bar .gb-pm {
+    position: absolute;
+    top: -16px;
+    right: 0;
+    background: var(--ink);
+    color: var(--bg);
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+  .gb-month-grid {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    gap: 1px;
+    padding: 1px;
+  }
+  .gb-month-cell {
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 2px;
+    transition: background 0.12s;
+  }
+  .gb-month-cell:hover { background: rgba(255,255,255,0.32); }
+  .gb-month-cell input {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: white;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0;
+    cursor: text;
+  }
+  .gb-month-cell input:focus {
+    background: rgba(0,0,0,0.4);
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+  }
+  .gb-month-cell input::-webkit-outer-spin-button,
+  .gb-month-cell input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .gb-month-cell input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .gb-month-cell.over { background: rgba(255, 80, 80, 0.45); }
+  .gb-month-cell.over input { color: white; font-weight: 700; }
+
+  /* Linha sumário mensal por pessoa (modo monthly) */
+  .gantt-row.sum-row {
+    min-height: 24px;
+    border-bottom: 1px solid var(--line-soft);
+    background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.015));
+  }
+  .gantt-label.sum-label {
+    font-size: 10px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+    padding-left: 16px;
+  }
+  .gantt-track.sum-track { height: 24px; background: none; }
+  .gb-sum-grid { display: grid; width: 100%; height: 100%; gap: 1px; }
+  .gb-sum-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: var(--line-soft);
+    border-radius: 2px;
+    cursor: help;
+    transition: background 0.15s, color 0.15s;
+  }
+  .gb-sum-cell.empty { background: transparent; color: var(--ink-faint); font-weight: 400; }
+  .gb-sum-cell.over { background: var(--danger); color: white; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
+
   @media (max-width: 1000px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
     .form-grid { grid-template-columns: 1fr 1fr; }
@@ -1065,7 +1209,7 @@
       <div class="card-head">
         <div>
           <div class="card-title">Timeline das alocações</div>
-          <div class="card-sub">Por pessoa, atividades agrupadas · clica numa barra para editar</div>
+          <div class="card-sub">Por pessoa, atividades agrupadas · arrasta para mover/redimensionar · clica para editar · activa "Mostrar mensais" para editar valor a valor</div>
         </div>
         <select id="gantt-quick">
           <option value="">Atalhos rápidos…</option>
@@ -1105,6 +1249,14 @@
         </div>
         <button class="btn btn-sm" id="gantt-clear-filters">Limpar filtros</button>
         <div class="spacer"></div>
+        <div class="seg" id="gantt-unit-seg" role="group" aria-label="Unidade">
+          <button type="button" class="active" data-unit="pm">PM</button>
+          <button type="button" data-unit="h">Horas</button>
+        </div>
+        <label class="toggle-inline" title="Mostra valor por mês em cada barra e permite edição inline">
+          <input type="checkbox" id="gantt-show-monthly">
+          <span>Mostrar mensais</span>
+        </label>
         <span id="gantt-filter-info" style="font-size:11px; color:var(--ink-faint)"></span>
       </div>
       <div class="gantt-wrap" id="gantt-wrap"></div>
@@ -2272,6 +2424,8 @@ function openRedistDialog(rec, newStartYM, newEndYM, newWorker, redrawFn) {
 
 // Estado do range mensal da Timeline (persistente entre re-renders)
 const ganttRange = { from: null, to: null };
+// Modo de visualização da timeline: 'compact' (default) ou 'monthly' (com inputs por mês)
+const ganttView = { mode: 'compact', unit: 'pm' };  // unit: 'pm' | 'h'
 
 function ymAddMonths(ym, n) {
   const {y, m} = ymParse(ym);
@@ -2303,6 +2457,100 @@ function defaultGanttRange() {
   const now = new Date();
   const start = ymKey(now.getFullYear(), now.getMonth() + 1);
   return { from: start, to: ymAddMonths(start, 11) };
+}
+
+// Atualiza a célula da linha-sumário para um (worker, mês) com base nos inputs visíveis
+function updateSumCell(worker, ym) {
+  const safeW = (worker || '').replace(/"/g, '&quot;');
+  const cell = document.querySelector(`.gb-sum-cell[data-worker-sum="${safeW}"][data-ym="${ym}"]`);
+  if (!cell) return;
+  const cap = getCapacity(worker, ym);
+  let hSum = 0;
+  const visibleRecIds = new Set();
+  document.querySelectorAll(`.gb-month-cell input[data-ym="${ym}"]`).forEach(inp => {
+    const recId = inp.dataset.rec;
+    const rec = state.records.find(x => x.id === recId);
+    if (!rec || rec.worker !== worker) return;
+    visibleRecIds.add(recId);
+    const v = parseFloat(inp.value) || 0;
+    hSum += ganttView.unit === 'pm' ? v * cap : v;
+  });
+  for (const r of state.records) {
+    if (r.worker !== worker || visibleRecIds.has(r.id)) continue;
+    if (r.monthsHours[ym]) hSum += r.monthsHours[ym];
+  }
+  const pm = cap > 0 ? hSum / cap : 0;
+  const isOver = pm > 1.001;
+  cell.classList.toggle('over', isOver);
+  cell.classList.toggle('empty', hSum === 0);
+  cell.textContent = hSum === 0 ? '–' : (ganttView.unit === 'pm' ? pm.toFixed(2) : round2(hSum));
+  cell.title = hSum === 0 ? `${ymLabel(ym)} · sem alocação` :
+    `${ymLabel(ym)} · ${round2(hSum)}h / ${cap}h · ${pm.toFixed(2)} PM${isOver ? '\n⚠ SOBREALOCALÇÃO' : ''}`;
+}
+
+// Bind dos inputs mensais inline na barra (modo "Mostrar mensais")
+function bindMonthlyInputs(redrawFn) {
+  let saveDebounce = null;
+  document.querySelectorAll('#gantt-wrap .gb-month-cell input').forEach(inp => {
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('input', () => {
+      const bar = inp.closest('.gantt-bar');
+      if (!bar) return;
+      let pmSum = 0;
+      bar.querySelectorAll('.gb-month-cell input').forEach(i => {
+        const v = parseFloat(i.value) || 0;
+        if (ganttView.unit === 'pm') {
+          pmSum += v;
+        } else {
+          const rec = state.records.find(x => x.id === i.dataset.rec);
+          if (rec) { const cap = getCapacity(rec.worker, i.dataset.ym); if (cap > 0) pmSum += v / cap; }
+        }
+      });
+      const badge = bar.querySelector('.gb-pm');
+      if (badge) badge.textContent = pmSum.toFixed(2) + ' PM';
+      const cell = inp.closest('.gb-month-cell');
+      const rec = state.records.find(x => x.id === inp.dataset.rec);
+      if (cell && rec) {
+        const v = parseFloat(inp.value) || 0;
+        const cap = getCapacity(rec.worker, inp.dataset.ym);
+        const pm = ganttView.unit === 'pm' ? v : (cap > 0 ? v / cap : 0);
+        cell.classList.toggle('over', pm > 1.001);
+        updateSumCell(rec.worker, inp.dataset.ym);
+      }
+    });
+    const commit = async () => {
+      const recId = inp.dataset.rec;
+      const ym = inp.dataset.ym;
+      const rec = state.records.find(x => x.id === recId);
+      if (!rec) return;
+      const v = parseFloat(inp.value);
+      let hours;
+      if (isNaN(v) || v < 0) {
+        hours = 0;
+      } else if (ganttView.unit === 'pm') {
+        hours = v * getCapacity(rec.worker, ym);
+      } else {
+        hours = v;
+      }
+      hours = round2(hours);
+      const prev = round2(rec.monthsHours[ym] || 0);
+      if (prev === hours) return;
+      if (hours === 0) delete rec.monthsHours[ym];
+      else rec.monthsHours[ym] = hours;
+      const yms = Object.keys(rec.monthsHours).sort();
+      if (yms.length > 0) { rec.start = yms[0]; rec.end = yms[yms.length - 1]; }
+      rec.totalHours = round2(Object.values(rec.monthsHours).reduce((s, v) => s + v, 0));
+      markUpdated(rec);
+      if (saveDebounce) clearTimeout(saveDebounce);
+      saveDebounce = setTimeout(() => saveState(), 250);
+    };
+    inp.addEventListener('change', commit);
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); inp.blur(); }
+      else if (e.key === 'Escape') inp.blur();
+    });
+  });
 }
 
 function renderGantt() {
@@ -2372,7 +2620,8 @@ function renderGantt() {
       return `<div>${label}</div>`;
     }).join('');
 
-    let html = `<div class="gantt" style="--cols:${nCols}">`;
+    const isMonthly = ganttView.mode === 'monthly';
+    let html = `<div class="gantt${isMonthly ? ' monthly-mode' : ''}" style="--cols:${nCols}">`;
     html += `<div class="gantt-row header"><div class="gantt-label">Pessoa / Atividade</div>
       <div class="gantt-axis" style="display:grid; grid-template-columns:repeat(${nCols},1fr)">${headerCells}</div>
     </div>`;
@@ -2402,6 +2651,28 @@ function renderGantt() {
       }
       const safeW = w.replace(/"/g,'&quot;');
       html += `<div class="gantt-row"><div class="gantt-label worker">${w} <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--ink-faint); font-weight:400">· ${workerPM.toFixed(2)} PM</span></div><div class="gantt-track" data-worker="${safeW}" style="--cols:${nCols}"></div></div>`;
+
+      // Linha-sumário mensal (só em modo monthly)
+      if (isMonthly) {
+        const sumCells = ymsRange.map(ym => {
+          let hSum = 0;
+          for (const r of byWorker[w]) { if (r.monthsHours[ym]) hSum += r.monthsHours[ym]; }
+          const cap = getCapacity(w, ym);
+          const pm = cap > 0 ? hSum / cap : 0;
+          const isOver = pm > 1.001;
+          const value = hSum === 0 ? '–' : (ganttView.unit === 'pm' ? pm.toFixed(2) : round2(hSum));
+          const tip = hSum === 0 ? `${ymLabel(ym)} · sem alocação` :
+            `${ymLabel(ym)} · ${round2(hSum)}h / ${cap}h · ${pm.toFixed(2)} PM${isOver ? '\n⚠ SOBREALOCALÇÃO' : ''}`;
+          return `<div class="gb-sum-cell${isOver ? ' over' : ''}${hSum === 0 ? ' empty' : ''}" data-worker-sum="${safeW}" data-ym="${ym}" title="${tip}">${value}</div>`;
+        }).join('');
+        html += `<div class="gantt-row sum-row">
+          <div class="gantt-label sum-label">Σ ${ganttView.unit === 'pm' ? 'PM' : 'horas'}/mês</div>
+          <div class="gantt-track sum-track" style="--cols:${nCols}">
+            <div class="gb-sum-grid" style="grid-template-columns:repeat(${nCols}, 1fr)">${sumCells}</div>
+          </div>
+        </div>`;
+      }
+
       for (const r of byWorker[w]) {
         const monthsActive = ymsRange.filter(ym => r.monthsHours[ym]);
         if (monthsActive.length === 0) continue;
@@ -2424,18 +2695,39 @@ function renderGantt() {
         }
         const pmDisplay = pmRange.toFixed(2);
         const label = `${r.project}${r.wp ? ' · '+r.wp : ''}`;
-        const tip = `${r.project}${r.wp?' / '+r.wp:''}${r.task?'\n'+r.task:''}\n${ymLabel(monthsActive[0])} → ${ymLabel(monthsActive[monthsActive.length-1])}\n${round2(hRange)}h no intervalo · ${pmDisplay} PM\nTotal registo: ${round2(totalH)}h · ${totalPM.toFixed(2)} PM\n\nArrasta para mover/redimensionar · clica para editar`;
-        // Mostrar sempre o badge PM (é a informação mais útil quando o range é pequeno).
-        // Esconder o nome quando a barra é tão estreita que ambos não cabem (heurística baseada em largura%).
-        const hideName = width < 8;  // <8% da pista ≈ barra de 1 coluna num range de ≥13 meses
+        const tipBase = `${r.project}${r.wp?' / '+r.wp:''}${r.task?'\n'+r.task:''}\n${ymLabel(monthsActive[0])} → ${ymLabel(monthsActive[monthsActive.length-1])}\n${round2(hRange)}h no intervalo · ${pmDisplay} PM\nTotal registo: ${round2(totalH)}h · ${totalPM.toFixed(2)} PM`;
+        const tip = isMonthly
+          ? tipBase + '\n\nEdita os valores diretamente em cada mês'
+          : tipBase + '\n\nArrasta para mover/redimensionar · clica para editar';
+        const hideName = width < 8;
         const safeWr = r.worker.replace(/"/g,'&quot;');
+
+        let barInner;
+        if (isMonthly) {
+          const cells = monthsActive.map(ym => {
+            const h = r.monthsHours[ym] || 0;
+            const cap = getCapacity(r.worker, ym);
+            const pm = cap > 0 ? h / cap : 0;
+            const isOver = pm > 1.001;
+            const value = ganttView.unit === 'pm' ? pm.toFixed(2) : round2(h);
+            return `<div class="gb-month-cell${isOver ? ' over' : ''}" title="${ymLabel(ym)} · ${round2(h)}h · ${pm.toFixed(2)} PM (cap. ${cap}h)">
+              <input type="number" step="${ganttView.unit === 'pm' ? '0.05' : '1'}" min="0" value="${value}" data-rec="${r.id}" data-ym="${ym}" />
+            </div>`;
+          }).join('');
+          barInner = `<div class="gb-month-grid" style="grid-template-columns:repeat(${monthsActive.length}, 1fr)">${cells}</div>
+            ${hideName ? '' : `<span class="gb-name">${label}</span>`}
+            <span class="gb-pm">${pmDisplay} PM</span>`;
+        } else {
+          barInner = `<div class="gb-handle gb-h-left" data-handle="left"></div>
+            ${hideName ? '' : `<span class="gb-name">${label}</span>`}
+            <span class="gb-pm">${pmDisplay} PM</span>
+            <div class="gb-handle gb-h-right" data-handle="right"></div>`;
+        }
+
         html += `<div class="gantt-row"><div class="gantt-label">${r.project}${r.wp ? ' · ' + r.wp : ''}</div>
           <div class="gantt-track" data-worker="${safeWr}" style="--cols:${nCols}">
             <div class="gantt-bar" data-id="${r.id}" style="left:${left}%; width:${width}%; background:${colorFor(r.project)}" title="${tip.replace(/"/g,'&quot;')}">
-              <div class="gb-handle gb-h-left" data-handle="left"></div>
-              ${hideName ? '' : `<span class="gb-name">${label}</span>`}
-              <span class="gb-pm">${pmDisplay} PM</span>
-              <div class="gb-handle gb-h-right" data-handle="right"></div>
+              ${barInner}
             </div>
           </div>
         </div>`;
@@ -2443,9 +2735,20 @@ function renderGantt() {
     }
     html += '</div>';
     document.getElementById('gantt-wrap').innerHTML = html;
-    document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
-      attachBarInteractions(bar, ymsRange, null, draw);
-    });
+    if (isMonthly) {
+      bindMonthlyInputs(draw);
+      document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
+        bar.addEventListener('click', e => {
+          if (e.target.closest('input, .gb-month-cell')) return;
+          const rec = state.records.find(x => x.id === bar.dataset.id);
+          if (rec) openModal(rec);
+        });
+      });
+    } else {
+      document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
+        attachBarInteractions(bar, ymsRange, null, draw);
+      });
+    }
   };
   draw();
 
@@ -2487,7 +2790,7 @@ function renderGantt() {
     }
     fromInput.value = ganttRange.from;
     toInput.value = ganttRange.to;
-    quickSel.value = '';  // reset
+    quickSel.value = '';
     draw();
   };
 
@@ -2503,6 +2806,26 @@ function renderGantt() {
   }
   bindMs('gantt-workers', 'workers');
   bindMs('gantt-projects', 'projects');
+
+  // Toggle "Mostrar mensais"
+  const monthlyToggle = document.getElementById('gantt-show-monthly');
+  monthlyToggle.checked = ganttView.mode === 'monthly';
+  monthlyToggle.onchange = () => {
+    ganttView.mode = monthlyToggle.checked ? 'monthly' : 'compact';
+    draw();
+  };
+
+  // Segmented unit toggle (PM / Horas)
+  const unitSeg = document.getElementById('gantt-unit-seg');
+  unitSeg.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.unit === ganttView.unit);
+    b.onclick = () => {
+      if (b.dataset.unit === ganttView.unit) return;
+      ganttView.unit = b.dataset.unit;
+      unitSeg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.unit === ganttView.unit));
+      if (ganttView.mode === 'monthly') draw();
+    };
+  });
 }
 
 // Comportamento global do multi-select (toggle do painel + Todos/Nenhum)
