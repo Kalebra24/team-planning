@@ -1051,6 +1051,81 @@
   .gb-sum-cell.empty { background: transparent; color: var(--ink-faint); font-weight: 400; }
   .gb-sum-cell.over { background: var(--danger); color: white; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
 
+  /* ──────── CHECK-IN PILL ──────── */
+  .checkin-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    cursor: default;
+    white-space: nowrap;
+  }
+  .checkin-pill.active {
+    background: var(--ok-bg);
+    border-color: var(--ok);
+    color: var(--ok);
+  }
+  .checkin-pill .ci-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .checkin-pill.active .ci-dot { background: var(--ok); }
+  .checkin-pill .ci-label { color: var(--ink-soft); font-size: 12px; }
+  .checkin-pill.active .ci-label { color: var(--ok); font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+  /* ──────── CHANGELOG MODAL ──────── */
+  .cl-list { display: flex; flex-direction: column; }
+  .cl-item {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 6px 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px;
+    align-items: baseline;
+  }
+  .cl-item:last-child { border-bottom: none; }
+  .cl-meta { display: flex; flex-direction: column; gap: 3px; }
+  .cl-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+  .cl-badge.create { background: var(--ok-bg); color: var(--ok); }
+  .cl-badge.update { background: var(--warn-bg); color: var(--warn); }
+  .cl-badge.delete { background: var(--danger-bg); color: var(--danger); }
+  .cl-time { font-size: 11px; color: var(--ink-faint); font-family: 'JetBrains Mono', monospace; }
+  .cl-name { font-weight: 500; }
+  .cl-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .cl-who { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--ink-faint); margin-left: 5px; }
+  .cl-empty { padding: 32px 0; text-align: center; color: var(--ink-faint); font-size: 13px; }
+  .cl-session-head {
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cl-session-head strong { font-family: 'JetBrains Mono', monospace; color: var(--ink); }
+
   @media (max-width: 1000px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
     .form-grid { grid-template-columns: 1fr 1fr; }
@@ -1075,6 +1150,11 @@
       <button data-view="equipa">Equipa</button>
     </nav>
     <div class="header-actions">
+      <div class="checkin-pill" id="checkin-pill" title="Iniciar / terminar sessão de edição">
+        <span class="ci-dot"></span>
+        <span class="ci-label" id="checkin-label">Sem sessão</span>
+        <button class="btn btn-sm" id="btn-checkin" style="margin-left:2px">Entrar</button>
+      </div>
       <div class="data-menu">
         <button class="btn btn-sm" id="btn-data-menu">Dados ▾</button>
         <div class="data-menu-panel" id="data-menu-panel">
@@ -1098,6 +1178,13 @@
             <button type="button" class="dm-item" id="btn-export">
               <span>↓ Exportar Excel</span>
               <span class="dm-hint">Folha de output</span>
+            </button>
+          </div>
+          <div class="dm-section">
+            <div class="dm-label">Sessões</div>
+            <button type="button" class="dm-item" id="btn-show-changelog">
+              <span>⧗ Diário de alterações</span>
+              <span class="dm-hint">Ver todas as modificações</span>
             </button>
           </div>
         </div>
@@ -1380,6 +1467,23 @@
   </div>
 </div>
 
+<!-- ═══════════ MODAL: DIÁRIO DE ALTERAÇÕES ═══════════ -->
+<div class="modal-bg" id="modal-changelog">
+  <div class="modal" style="max-width:640px; max-height:88vh">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Diário de alterações</div>
+        <div id="changelog-since" style="font-size:11px; color:var(--ink-faint); margin-top:2px"></div>
+      </div>
+      <button class="close-btn" id="modal-changelog-close">×</button>
+    </div>
+    <div id="changelog-body" style="max-height:58vh; overflow-y:auto; padding-right:4px"></div>
+    <div style="display:flex; justify-content:flex-end; margin-top:18px; padding-top:14px; border-top:1px solid var(--line-soft)">
+      <button type="button" class="btn btn-primary" id="btn-changelog-ok">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MODAL: DIFF (mesclar inteligente) ═══════════ -->
 <div class="modal-bg" id="modal-diff">
   <div class="modal" style="max-width:760px; max-height:88vh">
@@ -1500,6 +1604,133 @@ const state = {
   lastSyncBaseline: null,  // {timestamp, recordsById: {id: {hash, updatedAt}}} - estado no último sync
   editorInitials: '',      // iniciais do autor (persistente, usadas no nome dos ficheiros)
 };
+
+// ════════════════════════════════════════════════════════════════════════
+// SESSION (check-in / check-out)
+// ════════════════════════════════════════════════════════════════════════
+const sessionCtx = {
+  id: null,
+  initials: '',
+  checkedIn: false,
+  checkedInAt: null,
+};
+
+async function logChange(action, entityType, entityId, entityName, summary) {
+  if (!sessionCtx.checkedIn || !sessionCtx.id) return;
+  try {
+    await db.from('changelog').insert({
+      session_id: sessionCtx.id,
+      user_initials: sessionCtx.initials,
+      action,
+      entity_type: entityType,
+      entity_id: entityId || null,
+      entity_name: entityName || null,
+      summary: summary || null,
+    });
+  } catch (_) { /* non-fatal */ }
+}
+
+async function checkIn() {
+  const initials = await askInitials('check-in');
+  if (!initials) return;
+
+  // Find last checkout for this user to show changes since then
+  const { data: prevSessions } = await db.from('sessions')
+    .select('checked_out_at')
+    .eq('user_initials', initials)
+    .not('checked_out_at', 'is', null)
+    .order('checked_out_at', { ascending: false })
+    .limit(1);
+
+  const { data: session, error } = await db.from('sessions')
+    .insert({ user_initials: initials })
+    .select()
+    .single();
+  if (error) { toast('Erro ao iniciar sessão', 'error'); return; }
+
+  sessionCtx.id = session.id;
+  sessionCtx.initials = initials;
+  sessionCtx.checkedIn = true;
+  sessionCtx.checkedInAt = session.checked_in_at;
+
+  if (state.editorInitials !== initials) {
+    state.editorInitials = initials;
+    await saveState();
+  }
+
+  updateCheckinUI();
+  toast(`Sessão iniciada · ${initials}`);
+
+  const lastOut = prevSessions?.[0]?.checked_out_at;
+  await showChangelogModal(lastOut || null, initials);
+}
+
+async function checkOut() {
+  if (!sessionCtx.checkedIn || !sessionCtx.id) return;
+  const now = new Date().toISOString();
+  await db.from('sessions').update({ checked_out_at: now, is_active: false }).eq('id', sessionCtx.id);
+  const initials = sessionCtx.initials;
+  sessionCtx.id = null;
+  sessionCtx.checkedIn = false;
+  sessionCtx.checkedInAt = null;
+  updateCheckinUI();
+  toast(`Sessão terminada · ${initials}`);
+}
+
+async function showChangelogModal(since, currentUser) {
+  let query = db.from('changelog').select('*').order('changed_at', { ascending: false }).limit(200);
+  if (since) query = query.gt('changed_at', since);
+  let entries = [];
+  try { const { data } = await query; entries = data || []; } catch (_) { entries = []; }
+
+  const sinceEl = document.getElementById('changelog-since');
+  const body = document.getElementById('changelog-body');
+  const fmtTs = iso => new Date(iso).toLocaleString('pt-PT', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  sinceEl.textContent = since
+    ? `Alterações desde ${fmtTs(since)}`
+    : 'Todas as alterações registadas';
+
+  if (!entries || entries.length === 0) {
+    body.innerHTML = `<div class="cl-empty">Sem alterações registadas${since ? ' desde a última sessão' : ''}.</div>`;
+  } else {
+    const labelMap = { create: '+ criado', update: '~ editado', delete: '− eliminado' };
+    body.innerHTML = `<div class="cl-list">${entries.map(e => {
+      const isMe = e.user_initials === currentUser;
+      return `<div class="cl-item">
+        <div class="cl-meta">
+          <span class="cl-badge ${e.action}">${labelMap[e.action] || e.action}</span>
+          <span class="cl-time">${fmtTs(e.changed_at)}</span>
+        </div>
+        <div>
+          <div class="cl-name">${e.entity_name || e.entity_id || '—'}${!isMe ? `<span class="cl-who">(${e.user_initials})</span>` : ''}</div>
+          ${e.summary ? `<div class="cl-sub">${e.summary}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  document.getElementById('modal-changelog').classList.add('active');
+}
+
+function updateCheckinUI() {
+  const pill = document.getElementById('checkin-pill');
+  const label = document.getElementById('checkin-label');
+  const btn = document.getElementById('btn-checkin');
+  if (sessionCtx.checkedIn) {
+    pill.classList.add('active');
+    label.textContent = sessionCtx.initials;
+    btn.textContent = 'Sair';
+    btn.onclick = checkOut;
+  } else {
+    pill.classList.remove('active');
+    label.textContent = 'Sem sessão';
+    btn.textContent = 'Entrar';
+    btn.onclick = checkIn;
+  }
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // PERSISTENCE
@@ -2541,6 +2772,8 @@ function bindMonthlyInputs(redrawFn) {
       if (yms.length > 0) { rec.start = yms[0]; rec.end = yms[yms.length - 1]; }
       rec.totalHours = round2(Object.values(rec.monthsHours).reduce((s, v) => s + v, 0));
       markUpdated(rec);
+      const entityName = [rec.worker, rec.project, rec.task].filter(Boolean).join(' / ');
+      logChange('update', 'record', rec.id, entityName, `${ymLabel(ym)}: ${prev}h → ${hours}h`);
       if (saveDebounce) clearTimeout(saveDebounce);
       saveDebounce = setTimeout(() => saveState(), 250);
     };
@@ -3202,12 +3435,16 @@ document.getElementById('form-alloc').addEventListener('submit', async (e) => {
     monthsHours,
     updatedAt: new Date().toISOString(),
   };
+  const isNew = !id;
   if (id) {
     const idx = state.records.findIndex(r => r.id === id);
     if (idx >= 0) state.records[idx] = record;
   } else {
     state.records.push(record);
   }
+  const entityName = [worker, project, task].filter(Boolean).join(' / ');
+  await logChange(isNew ? 'create' : 'update', 'record', record.id, entityName,
+    `${round2(realSum)}h · ${start} → ${end}`);
   await saveState();
   closeModal();
   toast(id ? 'Alocação atualizada' : 'Alocação criada');
@@ -3218,7 +3455,10 @@ document.getElementById('modal-delete').onclick = async () => {
   const id = document.getElementById('f-id').value;
   if (!id) return;
   if (!confirm('Eliminar esta alocação?')) return;
+  const rec = state.records.find(r => r.id === id);
+  const entityName = rec ? [rec.worker, rec.project, rec.task].filter(Boolean).join(' / ') : id;
   state.records = state.records.filter(r => r.id !== id);
+  await logChange('delete', 'record', id, entityName, null);
   await saveState();
   closeModal();
   toast('Alocação eliminada');
@@ -3253,6 +3493,9 @@ document.querySelectorAll('.dm-item').forEach(item => {
     document.querySelector('.data-menu').classList.remove('open');
   });
 });
+
+document.getElementById('btn-show-changelog').onclick = () => showChangelogModal(null, sessionCtx.initials);
+document.getElementById('btn-checkin').onclick = checkIn;
 
 // ════════════════════════════════════════════════════════════════════════
 // DOWNLOAD / UPLOAD JSON
@@ -3311,6 +3554,11 @@ function updateInitialsPreview(purposeLabel) {
   const inp = document.getElementById('f-initials');
   const init = sanitizeInitials(inp.value) || '____';
   const ts = fileTimestamp();
+  if (purposeLabel === 'check-in') {
+    document.getElementById('initials-preview').textContent =
+      `Sessão iniciada como: ${init}`;
+    return;
+  }
   const ext = purposeLabel === 'excel' ? 'xlsx' : (purposeLabel === 'report' ? 'md' : 'json');
   const prefix = purposeLabel === 'excel' ? 'planeamento_processos' :
                  purposeLabel === 'report' ? 'sync_report' : 'planeamento_processos';
@@ -4096,6 +4344,17 @@ function toast(msg, kind='ok') {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// CHANGELOG MODAL WIRING
+// ════════════════════════════════════════════════════════════════════════
+document.getElementById('modal-changelog-close').onclick = () =>
+  document.getElementById('modal-changelog').classList.remove('active');
+document.getElementById('btn-changelog-ok').onclick = () =>
+  document.getElementById('modal-changelog').classList.remove('active');
+document.getElementById('modal-changelog').addEventListener('click', e => {
+  if (e.target.id === 'modal-changelog') document.getElementById('modal-changelog').classList.remove('active');
+});
+
+// ════════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════════
 (async function init() {
@@ -4104,6 +4363,7 @@ function toast(msg, kind='ok') {
     await seedFromExcel();
     toast('Dados iniciais carregados do Excel');
   }
+  updateCheckinUI();
   renderDashboard();
 })();
 </script>
