@@ -1619,6 +1619,7 @@ async function logChange(action, entityType, entityId, entityName, summary) {
   if (!sessionCtx.checkedIn || !sessionCtx.id) return;
   try {
     await db.from('changelog').insert({
+      app_id: APP_ID,
       session_id: sessionCtx.id,
       user_initials: sessionCtx.initials,
       action,
@@ -1637,13 +1638,14 @@ async function checkIn() {
   // Find last checkout for this user to show changes since then
   const { data: prevSessions } = await db.from('sessions')
     .select('checked_out_at')
+    .eq('app_id', APP_ID)
     .eq('user_initials', initials)
     .not('checked_out_at', 'is', null)
     .order('checked_out_at', { ascending: false })
     .limit(1);
 
   const { data: session, error } = await db.from('sessions')
-    .insert({ user_initials: initials })
+    .insert({ app_id: APP_ID, user_initials: initials })
     .select()
     .single();
   if (error) { toast('Erro ao iniciar sessão', 'error'); return; }
@@ -1678,7 +1680,7 @@ async function checkOut() {
 }
 
 async function showChangelogModal(since, currentUser) {
-  let query = db.from('changelog').select('*').order('changed_at', { ascending: false }).limit(200);
+  let query = db.from('changelog').select('*').eq('app_id', APP_ID).order('changed_at', { ascending: false }).limit(200);
   if (since) query = query.gt('changed_at', since);
   let entries = [];
   try { const { data } = await query; entries = data || []; } catch (_) { entries = []; }
@@ -1738,6 +1740,7 @@ function updateCheckinUI() {
 // ── SUPABASE CONFIG ── replace with your project values ──────────────────
 const SUPABASE_URL      = 'https://potcxtlldjwngvakuvwq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zD60byD3EaAr3F8_eswP9A_3ZBaUurU';
+const APP_ID            = 'team-planning';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function saveState() {
@@ -1747,9 +1750,10 @@ async function saveState() {
     for (const r of state.records) {
       if (!r.updatedAt) r.updatedAt = now;
     }
-    const workerRows = state.workers.map(name => ({ name }));
-    const projectRows = state.projects.map(p => ({ name: p.name, active: p.active }));
+    const workerRows = state.workers.map(name => ({ app_id: APP_ID, name }));
+    const projectRows = state.projects.map(p => ({ app_id: APP_ID, name: p.name, active: p.active }));
     const recordRows = state.records.map(r => ({
+      app_id: APP_ID,
       id: r.id,
       team: r.team || null,
       worker: r.worker || null,
@@ -1765,24 +1769,24 @@ async function saveState() {
     const capacityRows = [];
     for (const [worker, months] of Object.entries(state.capacity)) {
       for (const [ym, hours] of Object.entries(months)) {
-        capacityRows.push({ worker, ym, hours });
+        capacityRows.push({ app_id: APP_ID, worker, ym, hours });
       }
     }
 
     // Upsert current state and fetch existing keys in parallel
     const results = await Promise.all([
-      workerRows.length   ? db.from('workers').upsert(workerRows, { onConflict: 'name' })             : Promise.resolve({}),
-      projectRows.length  ? db.from('projects').upsert(projectRows, { onConflict: 'name' })           : Promise.resolve({}),
-      recordRows.length   ? db.from('records').upsert(recordRows, { onConflict: 'id' })               : Promise.resolve({}),
-      capacityRows.length ? db.from('capacity').upsert(capacityRows, { onConflict: 'worker,ym' })     : Promise.resolve({}),
+      workerRows.length   ? db.from('workers').upsert(workerRows, { onConflict: 'app_id,name' })          : Promise.resolve({}),
+      projectRows.length  ? db.from('projects').upsert(projectRows, { onConflict: 'app_id,name' })        : Promise.resolve({}),
+      recordRows.length   ? db.from('records').upsert(recordRows, { onConflict: 'id' })                   : Promise.resolve({}),
+      capacityRows.length ? db.from('capacity').upsert(capacityRows, { onConflict: 'app_id,worker,ym' })  : Promise.resolve({}),
       db.from('app_config').upsert([
-        { key: 'editorInitials',    value: state.editorInitials || '' },
-        { key: 'lastSyncBaseline',  value: JSON.stringify(state.lastSyncBaseline || null) },
-      ], { onConflict: 'key' }),
-      db.from('workers').select('name'),
-      db.from('projects').select('name'),
-      db.from('records').select('id'),
-      db.from('capacity').select('worker, ym'),
+        { app_id: APP_ID, key: 'editorInitials',   value: state.editorInitials || '' },
+        { app_id: APP_ID, key: 'lastSyncBaseline', value: JSON.stringify(state.lastSyncBaseline || null) },
+      ], { onConflict: 'app_id,key' }),
+      db.from('workers').select('name').eq('app_id', APP_ID),
+      db.from('projects').select('name').eq('app_id', APP_ID),
+      db.from('records').select('id').eq('app_id', APP_ID),
+      db.from('capacity').select('worker, ym').eq('app_id', APP_ID),
     ]);
     const [,,,,,{ data: dbWorkers }, { data: dbProjects }, { data: dbRecords }, { data: dbCap }] = results;
 
@@ -1802,10 +1806,10 @@ async function saveState() {
     )];
 
     const deleteOps = [
-      staleWorkers.length    ? db.from('workers').delete().in('name', staleWorkers)       : null,
-      staleProjects.length   ? db.from('projects').delete().in('name', staleProjects)     : null,
-      staleRecords.length    ? db.from('records').delete().in('id', staleRecords)         : null,
-      staleCapWorkers.length ? db.from('capacity').delete().in('worker', staleCapWorkers) : null,
+      staleWorkers.length    ? db.from('workers').delete().eq('app_id', APP_ID).in('name', staleWorkers)       : null,
+      staleProjects.length   ? db.from('projects').delete().eq('app_id', APP_ID).in('name', staleProjects)     : null,
+      staleRecords.length    ? db.from('records').delete().in('id', staleRecords)                              : null,
+      staleCapWorkers.length ? db.from('capacity').delete().eq('app_id', APP_ID).in('worker', staleCapWorkers) : null,
     ].filter(Boolean);
     if (deleteOps.length) await Promise.all(deleteOps);
   } catch (e) {
@@ -1846,11 +1850,11 @@ async function loadState() {
       { data: capacity, error: e4 },
       { data: config,   error: e5 },
     ] = await Promise.all([
-      db.from('workers').select('name').order('name'),
-      db.from('projects').select('name, active').order('name'),
-      db.from('records').select('*'),
-      db.from('capacity').select('worker, ym, hours'),
-      db.from('app_config').select('key, value'),
+      db.from('workers').select('name').eq('app_id', APP_ID).order('name'),
+      db.from('projects').select('name, active').eq('app_id', APP_ID).order('name'),
+      db.from('records').select('*').eq('app_id', APP_ID),
+      db.from('capacity').select('worker, ym, hours').eq('app_id', APP_ID),
+      db.from('app_config').select('key, value').eq('app_id', APP_ID),
     ]);
     if (e1 || e2 || e3 || e4 || e5) throw e1 || e2 || e3 || e4 || e5;
     if (!workers || workers.length === 0) return false;
