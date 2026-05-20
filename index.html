@@ -1177,6 +1177,36 @@
   .nm-pct.empty  { color: var(--ink-faint); }
   .nm-hours { font-size: 11px; color: var(--ink-faint); }
 
+  /* ──────── SESSION BANNER ──────── */
+  #session-banner {
+    background: var(--warn-bg);
+    border-bottom: 1px solid #d9c077;
+    padding: 8px 32px;
+    font-size: 12px;
+    color: #6b5200;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 49;
+  }
+  #session-banner strong { font-weight: 600; }
+  #session-banner button {
+    border: 1px solid #b89a00;
+    background: transparent;
+    color: #6b5200;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #session-banner button:hover { background: rgba(0,0,0,0.06); }
+
   @media (max-width: 1000px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
     .form-grid { grid-template-columns: 1fr 1fr; }
@@ -1263,6 +1293,12 @@
     </div>
   </div>
 </header>
+
+<div id="session-banner" style="display:none">
+  <span>&#128274;</span>
+  <span><strong>Modo de leitura</strong> — inicia sessão para fazer alterações.</span>
+  <button onclick="checkIn()">Entrar agora</button>
+</div>
 
 <main>
 
@@ -1899,20 +1935,30 @@ async function showChangelogModal(since, currentUser) {
   document.getElementById('modal-changelog').classList.add('active');
 }
 
+function guardEdit() {
+  if (sessionCtx.checkedIn) return true;
+  toast('Inicia sessão para fazer alterações', 'error');
+  checkIn();
+  return false;
+}
+
 function updateCheckinUI() {
   const pill = document.getElementById('checkin-pill');
   const label = document.getElementById('checkin-label');
   const btn = document.getElementById('btn-checkin');
+  const banner = document.getElementById('session-banner');
   if (sessionCtx.checkedIn) {
     pill.classList.add('active');
     label.textContent = sessionCtx.initials;
     btn.textContent = 'Sair';
     btn.onclick = checkOut;
+    if (banner) banner.style.display = 'none';
   } else {
     pill.classList.remove('active');
     label.textContent = 'Sem sessão';
     btn.textContent = 'Entrar';
     btn.onclick = checkIn;
+    if (banner) banner.style.display = 'flex';
   }
 }
 
@@ -2618,6 +2664,7 @@ function attachBarInteractions(bar, ymsRange, _yearUnused, redrawFn) {
 
 function onBarPointerDown(e, bar, ymsRange, redrawFn) {
   if (e.button !== 0) return;
+  if (!guardEdit()) return;
   const handle = e.target.closest('.gb-handle');
   const mode = handle ? (handle.dataset.handle === 'left' ? 'resize-left' : 'resize-right') : 'move';
   const recordId = bar.dataset.id;
@@ -3025,6 +3072,7 @@ function bindMonthlyInputs(redrawFn) {
       }
     });
     const commit = async () => {
+      if (!guardEdit()) return;
       const recId = inp.dataset.rec;
       const ym = inp.dataset.ym;
       const rec = state.records.find(x => x.id === recId);
@@ -3518,6 +3566,7 @@ function renderProjectsCatalog() {
 }
 
 window.toggleProject = async (name) => {
+  if (!guardEdit()) return;
   const p = state.projects.find(x => x.name === name);
   if (!p) return;
   p.active = p.active === false ? true : false;
@@ -3526,6 +3575,7 @@ window.toggleProject = async (name) => {
 };
 
 window.deleteProject = async (name) => {
+  if (!guardEdit()) return;
   const inUse = state.records.some(r => r.project === name);
   if (inUse) {
     if (!confirm(`O projeto "${name}" tem alocações. Eliminar mesmo assim? As alocações não serão apagadas mas ficarão sem projeto no catálogo.`)) return;
@@ -3539,6 +3589,7 @@ window.deleteProject = async (name) => {
 };
 
 document.getElementById('btn-add-project').onclick = async () => {
+  if (!guardEdit()) return;
   const inp = document.getElementById('new-project-name');
   const name = inp.value.trim();
   if (!name) return;
@@ -3610,6 +3661,7 @@ function renderEquipa() {
     document.getElementById('cap-wrap').innerHTML = html;
     document.querySelectorAll('.cap-input').forEach(inp => {
       inp.onchange = async () => {
+        if (!guardEdit()) { inp.value = inp.defaultValue; return; }
         const w = inp.dataset.worker, ym = inp.dataset.ym;
         const v = inp.value === '' ? null : parseFloat(inp.value);
         if (!state.capacity[w]) state.capacity[w] = {};
@@ -3624,6 +3676,7 @@ function renderEquipa() {
 }
 
 document.getElementById('btn-add-person').onclick = async () => {
+  if (!guardEdit()) return;
   const name = document.getElementById('new-person-name').value.trim();
   const cap = parseFloat(document.getElementById('new-person-cap').value) || 140;
   if (!name) { toast('Indica um nome', 'error'); return; }
@@ -3646,6 +3699,7 @@ document.getElementById('btn-add-person').onclick = async () => {
 };
 
 window.removePerson = async (name) => {
+  if (!guardEdit()) return;
   const allocCount = state.records.filter(r => r.worker === name).length;
   let msg = `Remover ${name} da equipa?`;
   if (allocCount > 0) msg += `\n\nEliminará também ${allocCount} alocação(ões) associada(s).`;
@@ -3701,7 +3755,7 @@ function closeModal() {
   modal.classList.remove('active');
 }
 
-document.getElementById('btn-new').onclick = () => openModal(null);
+document.getElementById('btn-new').onclick = () => { if (guardEdit()) openModal(null); };
 document.getElementById('modal-close').onclick = closeModal;
 document.getElementById('modal-cancel').onclick = closeModal;
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
@@ -3750,6 +3804,7 @@ document.getElementById('btn-redistribute').onclick = () => {
 
 document.getElementById('form-alloc').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!guardEdit()) return;
   const id = document.getElementById('f-id').value;
   const worker = document.getElementById('f-worker').value;
   const project = document.getElementById('f-project').value;
@@ -3797,6 +3852,7 @@ document.getElementById('form-alloc').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('modal-delete').onclick = async () => {
+  if (!guardEdit()) return;
   const id = document.getElementById('f-id').value;
   if (!id) return;
   if (!confirm('Eliminar esta alocação?')) return;
@@ -3811,6 +3867,7 @@ document.getElementById('modal-delete').onclick = async () => {
 };
 
 window.editRecord = (id) => {
+  if (!guardEdit()) return;
   const r = state.records.find(x => x.id === id);
   if (r) openModal(r);
 };
@@ -4061,6 +4118,7 @@ document.getElementById('modal-import-json').addEventListener('click', (e) => {
 });
 
 document.getElementById('impj-replace').onclick = async () => {
+  if (!guardEdit()) return;
   const p = pendingImport.value;
   if (!p) return;
   state.workers = [...p.workers];
@@ -4076,6 +4134,7 @@ document.getElementById('impj-replace').onclick = async () => {
 };
 
 document.getElementById('impj-merge').onclick = async () => {
+  if (!guardEdit()) return;
   const p = pendingImport.value;
   if (!p) return;
 
@@ -4317,6 +4376,7 @@ document.getElementById('modal-diff').addEventListener('click', (e) => {
 });
 
 document.getElementById('diff-apply').onclick = async () => {
+  if (!guardEdit()) return;
   if (!pendingDiff) return;
   const { incoming, diff } = pendingDiff;
 
@@ -4457,6 +4517,7 @@ function offerChangeReport(incoming, diff, applied) {
 
 // Botão "Mesclar inteligente"
 document.getElementById('impj-smart').onclick = () => {
+  if (!guardEdit()) return;
   const p = pendingImport.value;
   if (!p) return;
   // Fechar o modal anterior, abrir diff
@@ -4474,9 +4535,10 @@ function resetUIFilters() {
 // ════════════════════════════════════════════════════════════════════════
 // IMPORT/EXPORT EXCEL
 // ════════════════════════════════════════════════════════════════════════
-document.getElementById('btn-import').onclick = () => document.getElementById('file-input').click();
+document.getElementById('btn-import').onclick = () => { if (guardEdit()) document.getElementById('file-input').click(); };
 
 document.getElementById('file-input').addEventListener('change', async (e) => {
+  if (!guardEdit()) { e.target.value = ''; return; }
   const file = e.target.files[0];
   if (!file) return;
   if (!confirm('Importar substitui as alocações atuais. Continuar?')) {
@@ -4676,6 +4738,7 @@ document.getElementById('btn-export').onclick = async () => {
 // CLEAR
 // ════════════════════════════════════════════════════════════════════════
 document.getElementById('btn-clear').onclick = async () => {
+  if (!guardEdit()) return;
   if (!confirm('Eliminar TODAS as alocações? (mantém pessoas, projetos e capacidades)')) return;
   state.records = [];
   await saveState();
@@ -4737,6 +4800,7 @@ document.getElementById('btn-menu-arquivo').onclick = () => {
 
 document.getElementById('form-submit-plan').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!guardEdit()) return;
   const planMonth = document.getElementById('f-plan-month').value;
   const label = document.getElementById('f-plan-note').value.trim();
   if (!planMonth) return;
@@ -4879,6 +4943,7 @@ document.getElementById('modal-snapshot').addEventListener('click', e => {
 });
 
 document.getElementById('snapshot-delete-btn').onclick = async () => {
+  if (!guardEdit()) return;
   if (!confirm('Eliminar este plano do arquivo? Esta ação não pode ser revertida.')) return;
   state.planSnapshots = state.planSnapshots.filter(s => s.id !== _currentSnapshotId);
   await savePlanSnapshots();
@@ -4888,6 +4953,7 @@ document.getElementById('snapshot-delete-btn').onclick = async () => {
 };
 
 document.getElementById('snapshot-restore-btn').onclick = async () => {
+  if (!guardEdit()) return;
   const s = (state.planSnapshots || []).find(x => x.id === _currentSnapshotId);
   if (!s) return;
   if (!confirm(`Restaurar o estado do plano de ${ymLabel(s.planMonth)}?\nO estado atual será substituído.`)) return;
