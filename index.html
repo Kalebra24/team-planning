@@ -52,11 +52,20 @@
   .header-inner {
     max-width: 1600px;
     margin: 0 auto;
-    padding: 18px 32px;
+    padding: 14px 32px 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .header-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 24px;
+    padding-bottom: 12px;
+  }
+  .header-nav {
+    border-top: 1px solid var(--line-soft);
+    padding: 6px 0;
   }
   .brand { display: flex; flex-direction: column; gap: 2px; }
   .brand .title {
@@ -1137,20 +1146,12 @@
 
 <header>
   <div class="header-inner">
-    <div class="brand">
-      <span class="title">Planeamento de Recursos</span>
-      <span class="sub">Equipa Processos · v1.0</span>
-    </div>
-    <nav class="tabs" id="tabs">
-      <button class="active" data-view="dashboard">Dashboard</button>
-      <button data-view="alocacoes">Alocações</button>
-      <button data-view="heatmap">Heatmap</button>
-      <button data-view="gantt">Timeline</button>
-      <button data-view="projetos">Por Projeto</button>
-      <button data-view="equipa">Equipa</button>
-      <button data-view="arquivo">Arquivo</button>
-    </nav>
-    <div class="header-actions">
+    <div class="header-top">
+      <div class="brand">
+        <span class="title">Planeamento de Recursos</span>
+        <span class="sub">Equipa Processos · v1.0</span>
+      </div>
+      <div class="header-actions">
       <div class="checkin-pill" id="checkin-pill" title="Iniciar / terminar sessão de edição">
         <span class="ci-dot"></span>
         <span class="ci-label" id="checkin-label">Sem sessão</span>
@@ -1205,6 +1206,18 @@
       <input type="file" id="file-input-json" accept=".json,application/json" style="display:none">
       <button class="btn btn-sm btn-accent" id="btn-submit-plan">↑ Submeter Plano</button>
       <button class="btn btn-sm btn-primary" id="btn-new">+ Nova Alocação</button>
+    </div>
+    </div><!-- /.header-top -->
+    <div class="header-nav">
+      <nav class="tabs" id="tabs">
+        <button class="active" data-view="dashboard">Dashboard</button>
+        <button data-view="alocacoes">Alocações</button>
+        <button data-view="heatmap">Heatmap</button>
+        <button data-view="gantt">Timeline</button>
+        <button data-view="projetos">Por Projeto</button>
+        <button data-view="equipa">Equipa</button>
+        <button data-view="arquivo">Arquivo</button>
+      </nav>
     </div>
   </div>
 </header>
@@ -1385,6 +1398,20 @@
         <div class="card-sub"><span id="proj-period" class="mono"></span></div>
       </div>
       <div class="table-wrap" id="matrix-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Catálogo de projetos</div>
+          <div class="card-sub"><span id="proj-count">0</span> projetos · clica no nome para (des)ativar</div>
+        </div>
+      </div>
+      <div class="add-person-row">
+        <input type="text" id="new-project-name" placeholder="Nome do novo projeto (ex: POCTEP-SMARTFLOW)">
+        <button class="btn btn-primary" id="btn-add-project">+ Adicionar</button>
+      </div>
+      <div class="people-list" id="projects-list" style="margin-top:12px"></div>
     </div>
   </section>
 
@@ -3313,7 +3340,77 @@ function renderProjects() {
   };
   draw();
   yearSel.onchange = draw;
+  renderProjectsCatalog();
 }
+
+function renderProjectsCatalog() {
+  const list = document.getElementById('projects-list');
+  if (!list) return;
+  const sorted = [...state.projects].sort((a, b) => a.name.localeCompare(b.name));
+  document.getElementById('proj-count').textContent = sorted.length;
+
+  const usedProjects = new Set(state.records.map(r => r.project));
+
+  list.innerHTML = sorted.map(p => {
+    const active = p.active !== false;
+    const used = usedProjects.has(p.name);
+    return `
+      <div class="person-card">
+        <div style="flex:1; min-width:0">
+          <div class="name" style="cursor:pointer; display:flex; align-items:center; gap:8px" onclick="toggleProject('${p.name.replace(/'/g, "\\'")}')">
+            ${p.name}
+            <span class="badge ${active ? 'ok' : ''}" style="${active ? '' : 'color:var(--ink-faint)'}">
+              ${active ? 'ativo' : 'inativo'}
+            </span>
+          </div>
+          ${used ? `<div class="stats-mini">${state.records.filter(r=>r.project===p.name).length} alocação(ões)</div>` : '<div class="stats-mini" style="color:var(--ink-faint)">sem alocações</div>'}
+        </div>
+        <button class="x" onclick="deleteProject('${p.name.replace(/'/g, "\\'")}')" title="Remover projeto">×</button>
+      </div>
+    `;
+  }).join('') || '<p style="color:var(--ink-faint); font-size:13px; padding:8px 0">Sem projetos no catálogo.</p>';
+}
+
+window.toggleProject = async (name) => {
+  const p = state.projects.find(x => x.name === name);
+  if (!p) return;
+  p.active = p.active === false ? true : false;
+  await saveState();
+  renderProjectsCatalog();
+};
+
+window.deleteProject = async (name) => {
+  const inUse = state.records.some(r => r.project === name);
+  if (inUse) {
+    if (!confirm(`O projeto "${name}" tem alocações. Eliminar mesmo assim? As alocações não serão apagadas mas ficarão sem projeto no catálogo.`)) return;
+  } else {
+    if (!confirm(`Eliminar o projeto "${name}"?`)) return;
+  }
+  state.projects = state.projects.filter(p => p.name !== name);
+  await saveState();
+  renderProjectsCatalog();
+  toast(`Projeto "${name}" removido`);
+};
+
+document.getElementById('btn-add-project').onclick = async () => {
+  const inp = document.getElementById('new-project-name');
+  const name = inp.value.trim();
+  if (!name) return;
+  if (state.projects.find(p => p.name === name)) {
+    toast('Projeto já existe no catálogo', 'error');
+    return;
+  }
+  state.projects.push({ name, active: true });
+  state.projects.sort((a, b) => a.name.localeCompare(b.name));
+  await saveState();
+  inp.value = '';
+  renderProjectsCatalog();
+  toast(`Projeto "${name}" adicionado`);
+};
+
+document.getElementById('new-project-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-add-project').click(); }
+});
 
 // ════════════════════════════════════════════════════════════════════════
 // EQUIPA (gestão de pessoas)
