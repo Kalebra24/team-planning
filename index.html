@@ -1135,6 +1135,48 @@
   }
   .cl-session-head strong { font-family: 'JetBrains Mono', monospace; color: var(--ink); }
 
+  /* ──────── NEXT-MONTH PANEL ──────── */
+  .nm-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 20px;
+  }
+  .nm-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .nm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .nm-cell {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .nm-cell.ok   { border-color: #b8ccaa; background: #f2f6ee; }
+  .nm-cell.warn { border-color: #d9c077; background: #faf5e0; }
+  .nm-cell.danger { border-color: #d9a099; background: #faf0ee; }
+  .nm-cell.empty  { border-color: var(--line); background: var(--bg); opacity: 0.6; }
+  .nm-name { font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nm-pct  { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 600; line-height: 1; }
+  .nm-pct.ok     { color: var(--ok); }
+  .nm-pct.warn   { color: var(--warn); }
+  .nm-pct.danger { color: var(--danger); }
+  .nm-pct.empty  { color: var(--ink-faint); }
+  .nm-hours { font-size: 11px; color: var(--ink-faint); }
+
   @media (max-width: 1000px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
     .form-grid { grid-template-columns: 1fr 1fr; }
@@ -1228,15 +1270,31 @@
   <section class="view active" id="view-dashboard">
     <div class="stats" id="stats"></div>
     <div id="alerts-container"></div>
+    <div id="next-month-panel"></div>
 
     <div class="card">
       <div class="card-head">
         <div>
-          <div class="card-title">Capacidade vs alocação — média mensal</div>
-          <div class="card-sub">Período selecionado: <span id="bar-period" class="mono"></span></div>
+          <div class="card-title">Capacidade vs alocação</div>
+          <div class="card-sub">Período: <span id="bar-period" class="mono"></span></div>
         </div>
-        <div>
+        <div style="display:flex; gap:8px">
           <select id="bar-year"></select>
+          <select id="bar-month">
+            <option value="0">Média anual</option>
+            <option value="1">Janeiro</option>
+            <option value="2">Fevereiro</option>
+            <option value="3">Março</option>
+            <option value="4">Abril</option>
+            <option value="5">Maio</option>
+            <option value="6">Junho</option>
+            <option value="7">Julho</option>
+            <option value="8">Agosto</option>
+            <option value="9">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
         </div>
       </div>
       <div class="bar-chart" id="bar-chart"></div>
@@ -2110,46 +2168,87 @@ function renderView(name) {
 // DASHBOARD
 // ════════════════════════════════════════════════════════════════════════
 function renderDashboard() {
-  // Stats
-  const totalRecords = state.records.length;
-  const totalWorkers = state.workers.length;
-  const totalProjects = new Set(state.records.map(r => r.project)).size;
+  const now = new Date();
+  const curYM = ymKey(now.getFullYear(), now.getMonth() + 1);
+  let nYear = now.getFullYear(), nMonth = now.getMonth() + 2;
+  if (nMonth > 12) { nMonth = 1; nYear++; }
+  const nextYM = ymKey(nYear, nMonth);
 
-  // Detectar sobrealocações
-  const utilByMonth = {};  // worker -> ym -> hours
+  // Build utilByMonth: worker -> ym -> hours
+  const utilByMonth = {};
   for (const r of state.records) {
     for (const [ym, h] of Object.entries(r.monthsHours)) {
       if (!utilByMonth[r.worker]) utilByMonth[r.worker] = {};
       utilByMonth[r.worker][ym] = (utilByMonth[r.worker][ym] || 0) + h;
     }
   }
+
+  // Overallocations >110%
   let overCount = 0;
   const overDetails = [];
   for (const [w, months] of Object.entries(utilByMonth)) {
     for (const [ym, hours] of Object.entries(months)) {
       const cap = getCapacity(w, ym);
-      const pct = cap > 0 ? (hours / cap) : 0;
-      if (pct > 1.10) {
-        overCount++;
-        overDetails.push({w, ym, pct, hours, cap});
-      }
+      const pct = cap > 0 ? hours / cap : 0;
+      if (pct > 1.10) { overCount++; overDetails.push({w, ym, pct, hours, cap}); }
     }
   }
 
+  // Stat 1: avg utilization current month
+  let totalUtil = 0, utilCount = 0;
+  for (const w of state.workers) {
+    const cap = getCapacity(w, curYM);
+    const h = utilByMonth[w]?.[curYM] || 0;
+    if (cap > 0) { totalUtil += h / cap; utilCount++; }
+  }
+  const avgUtil = utilCount > 0 ? Math.round(totalUtil / utilCount * 100) : 0;
+  const utilCls = avgUtil > 105 ? 'danger' : avgUtil > 90 ? 'warn' : avgUtil > 30 ? 'ok' : '';
+
+  // Stat 2: gap risk — people with <20% in any of next 3 months
+  const next3 = [];
+  for (let i = 1; i <= 3; i++) {
+    let mm = now.getMonth() + 1 + i, yy = now.getFullYear();
+    if (mm > 12) { mm -= 12; yy++; }
+    next3.push(ymKey(yy, mm));
+  }
+  const gapWorkers = state.workers.filter(w =>
+    next3.some(ym => {
+      const cap = getCapacity(w, ym);
+      const h = utilByMonth[w]?.[ym] || 0;
+      return cap > 0 && (h / cap) < 0.20;
+    })
+  );
+
+  // Stat 3: projects with allocations
+  const totalProjects = new Set(state.records.map(r => r.project)).size;
+
   document.getElementById('stats').innerHTML = `
-    <div class="stat"><div class="stat-label">Pessoas</div><div class="stat-value">${totalWorkers}</div><div class="stat-sub">na equipa Processos</div></div>
-    <div class="stat"><div class="stat-label">Alocações</div><div class="stat-value">${totalRecords}</div><div class="stat-sub">registos ativos</div></div>
-    <div class="stat"><div class="stat-label">Projetos com alocação</div><div class="stat-value">${totalProjects}</div><div class="stat-sub">de ${state.projects.length} no catálogo</div></div>
-    <div class="stat"><div class="stat-label">Sobrealocações &gt;110%</div><div class="stat-value ${overCount>0?'danger':'ok'}">${overCount}</div><div class="stat-sub">meses · ${new Set(overDetails.map(d=>d.w)).size} pessoa(s)</div></div>
+    <div class="stat">
+      <div class="stat-label">Utilização média — ${ymLabel(curYM)}</div>
+      <div class="stat-value ${utilCls}">${avgUtil}%</div>
+      <div class="stat-sub">${utilCount} pessoa(s) com capacidade definida</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Em risco de lacuna (próx. 3 meses)</div>
+      <div class="stat-value ${gapWorkers.length > 0 ? 'warn' : 'ok'}">${gapWorkers.length}</div>
+      <div class="stat-sub">${gapWorkers.length > 0 ? gapWorkers.slice(0,2).join(', ') + (gapWorkers.length > 2 ? ` +${gapWorkers.length-2}` : '') : 'equipa coberta'}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Projetos com alocação</div>
+      <div class="stat-value">${totalProjects}</div>
+      <div class="stat-sub">de ${state.projects.length} no catálogo</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Sobrealocações &gt;110%</div>
+      <div class="stat-value ${overCount > 0 ? 'danger' : 'ok'}">${overCount}</div>
+      <div class="stat-sub">meses · ${new Set(overDetails.map(d => d.w)).size} pessoa(s)</div>
+    </div>
   `;
 
   // Alertas
   if (overDetails.length > 0) {
     const grouped = {};
-    for (const d of overDetails) {
-      if (!grouped[d.w]) grouped[d.w] = [];
-      grouped[d.w].push(d);
-    }
+    for (const d of overDetails) { if (!grouped[d.w]) grouped[d.w] = []; grouped[d.w].push(d); }
     const items = Object.entries(grouped).slice(0, 5).map(([w, arr]) => {
       const top = arr.sort((a,b) => b.pct - a.pct)[0];
       return `<strong>${w}</strong>: ${arr.length} mês(es) em sobrealocação · pico ${Math.round(top.pct*100)}% em ${ymLabel(top.ym)}`;
@@ -2158,33 +2257,83 @@ function renderDashboard() {
       <div class="alerts">
         <div class="alerts-title">⚠ Sobrealocações detetadas</div>
         <div class="alerts-list">${items.join('<br>')}${Object.keys(grouped).length > 5 ? '<br><em>… e mais ' + (Object.keys(grouped).length - 5) + ' pessoa(s)</em>' : ''}</div>
-      </div>
-    `;
+      </div>`;
   } else {
     document.getElementById('alerts-container').innerHTML = '';
   }
 
-  // Bar chart: alocação vs capacidade ano selecionado
+  // Next-month panel
+  renderNextMonthPanel(nextYM, utilByMonth);
+
+  // Bar chart
   const yearSel = document.getElementById('bar-year');
+  const monthSel = document.getElementById('bar-month');
   const years = getAllYears();
-  const currentYear = parseInt(yearSel.value) || new Date().getFullYear();
-  const targetYear = years.includes(currentYear) ? currentYear : years[Math.floor(years.length/2)] || years[0];
+  const curYear = parseInt(yearSel.value) || now.getFullYear();
+  const targetYear = years.includes(curYear) ? curYear : years[Math.floor(years.length/2)] || years[0];
   yearSel.innerHTML = years.map(y => `<option value="${y}" ${y===targetYear?'selected':''}>${y}</option>`).join('');
 
-  renderBarChart(parseInt(yearSel.value));
-  yearSel.onchange = () => renderBarChart(parseInt(yearSel.value));
+  // Default bar-month to current month on first render
+  if (!monthSel._initialized) {
+    monthSel.value = now.getMonth() + 1;
+    monthSel._initialized = true;
+  }
+
+  const doBarChart = () => renderBarChart(parseInt(yearSel.value), parseInt(monthSel.value));
+  yearSel.onchange = doBarChart;
+  monthSel.onchange = doBarChart;
+  doBarChart();
 }
 
-function renderBarChart(year) {
-  document.getElementById('bar-period').textContent = `${year}`;
-  const ymsYear = [];
-  for (let m = 1; m <= 12; m++) ymsYear.push(ymKey(year, m));
+function renderNextMonthPanel(ym, utilByMonth) {
+  const panel = document.getElementById('next-month-panel');
+  if (!panel) return;
+
+  const cells = state.workers.map(w => {
+    const cap = getCapacity(w, ym);
+    const h = utilByMonth[w]?.[ym] || 0;
+    const pct = cap > 0 ? h / cap : 0;
+    const cls = cap === 0 ? 'empty' : pct > 1.05 ? 'danger' : pct > 0.90 ? 'warn' : pct > 0.05 ? 'ok' : 'empty';
+    const pctLabel = cap === 0 ? '—' : `${Math.round(pct * 100)}%`;
+    const hoursLabel = cap === 0 ? 'sem cap.' : `${Math.round(h)}h / ${Math.round(cap)}h`;
+    return `
+      <div class="nm-cell ${cls}">
+        <div class="nm-name">${w}</div>
+        <div class="nm-pct ${cls}">${pctLabel}</div>
+        <div class="nm-hours">${hoursLabel}</div>
+      </div>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div class="nm-card">
+      <div class="nm-head">
+        <div>
+          <span class="card-title" style="font-size:16px">Próximo mês — ${ymLabel(ym)}</span>
+          <span class="card-sub" style="margin-left:10px">carga planeada por pessoa</span>
+        </div>
+        <div style="display:flex; gap:10px; font-size:11px; color:var(--ink-faint)">
+          <span style="color:var(--ok)">■</span> normal
+          <span style="color:var(--warn)">■</span> &gt;90%
+          <span style="color:var(--danger)">■</span> &gt;105%
+        </div>
+      </div>
+      <div class="nm-grid">${cells}</div>
+    </div>`;
+}
+
+function renderBarChart(year, month = 0) {
+  const MONTHS_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const label = month === 0 ? `${year} — média anual` : `${MONTHS_FULL[month-1]} ${year}`;
+  document.getElementById('bar-period').textContent = label;
+
+  const yms = month === 0
+    ? Array.from({length: 12}, (_, i) => ymKey(year, i + 1))
+    : [ymKey(year, month)];
 
   const rows = state.workers.map(w => {
     let totalH = 0, totalC = 0;
-    for (const ym of ymsYear) {
-      const cap = getCapacity(w, ym);
-      totalC += cap;
+    for (const ym of yms) {
+      totalC += getCapacity(w, ym);
       for (const r of state.records) {
         if (r.worker === w && r.monthsHours[ym]) totalH += r.monthsHours[ym];
       }
@@ -2194,21 +2343,18 @@ function renderBarChart(year) {
 
   const container = document.getElementById('bar-chart');
   if (rows.every(r => r.alloc === 0)) {
-    container.innerHTML = '<div class="empty-state"><div class="display">Sem alocações neste ano</div></div>';
+    container.innerHTML = '<div class="empty-state"><div class="display">Sem alocações neste período</div></div>';
     return;
   }
   container.innerHTML = rows.map(r => {
     const width = Math.min(r.pct * 100, 130);
-    const cls = r.pct > 1.05 ? 'danger' : r.pct > 0.95 ? 'warn' : '';
+    const cls = r.pct > 1.05 ? 'danger' : r.pct > 0.90 ? 'warn' : '';
     return `
       <div class="bar-row">
         <div class="bar-name">${r.worker}</div>
-        <div class="bar-track">
-          <div class="bar-fill ${cls}" style="width:${width}%"></div>
-        </div>
+        <div class="bar-track"><div class="bar-fill ${cls}" style="width:${width}%"></div></div>
         <div class="bar-val">${Math.round(r.pct*100)}%</div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
