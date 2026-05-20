@@ -50,7 +50,9 @@ Funciona inteiramente num único ficheiro `index.html`, sem servidor de aplicaç
 
 ## Colaboração e sessões
 
-- **Check-in / check-out** — cada utilizador inicia uma sessão com as suas iniciais; todas as alterações ficam registadas com autoria e timestamp
+- **Modo de leitura** — sem sessão ativa, a aplicação é somente de leitura; um banner amarelo indica o estado e oferece acesso direto ao check-in
+- **Check-in / check-out** — cada utilizador inicia uma sessão com as suas iniciais (até 4 caracteres); todas as alterações ficam registadas com autoria e timestamp
+- **Bloqueio de edições** — qualquer tentativa de escrita sem sessão (criar/editar/eliminar alocações, arrastar no Gantt, editar capacidades, importar dados, etc.) é bloqueada e abre automaticamente o diálogo de check-in
 - **Diário de alterações** — visível no menu Dados, mostra as modificações desde a última sessão do utilizador atual
 - **Mesclar inteligente (3-way diff)** — ao importar um ficheiro JSON, o sistema deteta automaticamente registos novos, alterados, em conflito (vence o mais recente) e eliminados
 
