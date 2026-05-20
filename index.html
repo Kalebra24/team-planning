@@ -1148,6 +1148,7 @@
       <button data-view="gantt">Timeline</button>
       <button data-view="projetos">Por Projeto</button>
       <button data-view="equipa">Equipa</button>
+      <button data-view="arquivo">Arquivo</button>
     </nav>
     <div class="header-actions">
       <div class="checkin-pill" id="checkin-pill" title="Iniciar / terminar sessão de edição">
@@ -1181,6 +1182,17 @@
             </button>
           </div>
           <div class="dm-section">
+            <div class="dm-label">Arquivo Mensal</div>
+            <button type="button" class="dm-item" id="btn-menu-submit-plan">
+              <span>↑ Submeter plano do mês</span>
+              <span class="dm-hint">Guardar snapshot para consulta futura</span>
+            </button>
+            <button type="button" class="dm-item" id="btn-menu-arquivo">
+              <span>⧗ Consultar arquivo</span>
+              <span class="dm-hint">Histórico de planos submetidos</span>
+            </button>
+          </div>
+          <div class="dm-section">
             <div class="dm-label">Sessões</div>
             <button type="button" class="dm-item" id="btn-show-changelog">
               <span>⧗ Diário de alterações</span>
@@ -1191,6 +1203,7 @@
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
       <input type="file" id="file-input-json" accept=".json,application/json" style="display:none">
+      <button class="btn btn-sm btn-accent" id="btn-submit-plan">↑ Submeter Plano</button>
       <button class="btn btn-sm btn-primary" id="btn-new">+ Nova Alocação</button>
     </div>
   </div>
@@ -1405,6 +1418,40 @@
       <div class="table-wrap" id="cap-wrap"></div>
     </div>
   </section>
+
+  <!-- ═══════════ ARQUIVO ═══════════ -->
+  <section class="view" id="view-arquivo">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Arquivo de planos mensais</div>
+          <div class="card-sub"><span id="archive-count">0</span> planos submetidos</div>
+        </div>
+        <button class="btn btn-accent btn-sm" id="btn-submit-plan-2">↑ Submeter Plano do Mês</button>
+      </div>
+      <div class="empty-state" id="archive-empty" style="display:none">
+        <div class="display">Sem submissões</div>
+        <p style="margin-top:8px; font-size:13px">Submeta o plano do mês após todas as alterações dos chefes de equipa.</p>
+      </div>
+      <div class="table-wrap" id="archive-table-wrap" style="display:none">
+        <table class="data" id="table-archive">
+          <thead>
+            <tr>
+              <th>Mês do plano</th>
+              <th>Submetido em</th>
+              <th>Por</th>
+              <th>Nota</th>
+              <th style="text-align:right">Alocações</th>
+              <th style="text-align:right">Pessoas</th>
+              <th style="text-align:right">Projetos</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="archive-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 </main>
 
 <!-- Tooltip flutuante durante drag -->
@@ -1464,6 +1511,55 @@
         <button type="submit" class="btn btn-primary">Gravar</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: SUBMETER PLANO ═══════════ -->
+<div class="modal-bg" id="modal-submit-plan">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <div class="modal-title">Submeter Plano Mensal</div>
+      <button class="close-btn" id="modal-submit-plan-close">×</button>
+    </div>
+    <p style="margin-bottom:16px; font-size:13px; color:var(--ink-soft)">Guarda um snapshot do estado atual do plano para consulta futura.</p>
+    <form id="form-submit-plan">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="field">
+          <label for="f-plan-month">Mês do plano</label>
+          <input type="month" id="f-plan-month" required style="font-family:'JetBrains Mono',monospace">
+        </div>
+        <div class="field">
+          <label for="f-plan-note">Nota (opcional)</label>
+          <input type="text" id="f-plan-note" placeholder="Ex: após revisão dos chefes de equipa">
+        </div>
+        <div id="plan-submit-stats" style="background:var(--bg); border:1px solid var(--line); border-radius:7px; padding:14px 16px"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line-soft)">
+        <button type="button" class="btn" id="sp-cancel">Cancelar</button>
+        <button type="submit" class="btn btn-accent">↑ Guardar no arquivo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: VER SNAPSHOT ═══════════ -->
+<div class="modal-bg" id="modal-snapshot">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="snapshot-modal-title">Plano de —</div>
+        <div style="font-size:12px; color:var(--ink-faint); margin-top:4px" id="snapshot-modal-meta"></div>
+      </div>
+      <button class="close-btn" id="modal-snapshot-close">×</button>
+    </div>
+    <div id="snapshot-modal-body"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:16px; border-top:1px solid var(--line-soft)">
+      <button class="btn btn-danger btn-sm" id="snapshot-delete-btn">Eliminar do arquivo</button>
+      <div style="display:flex; gap:8px">
+        <button class="btn btn-sm" id="snapshot-restore-btn">Restaurar este plano</button>
+        <button class="btn btn-sm" id="snapshot-close-btn">Fechar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1603,6 +1699,7 @@ const state = {
   defaultCapacity: 140,
   lastSyncBaseline: null,  // {timestamp, recordsById: {id: {hash, updatedAt}}} - estado no último sync
   editorInitials: '',      // iniciais do autor (persistente, usadas no nome dos ficheiros)
+  planSnapshots: null,     // null = not loaded yet; array once loaded
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1978,6 +2075,7 @@ function renderView(name) {
     case 'gantt': renderGantt(); break;
     case 'projetos': renderProjects(); break;
     case 'equipa': renderEquipa(); break;
+    case 'arquivo': renderArquivo(); break;
   }
 }
 
@@ -3563,6 +3661,11 @@ function updateInitialsPreview(purposeLabel) {
       `Sessão iniciada como: ${init}`;
     return;
   }
+  if (purposeLabel === 'plan') {
+    document.getElementById('initials-preview').textContent =
+      `Plano submetido por: ${init}`;
+    return;
+  }
   const ext = purposeLabel === 'excel' ? 'xlsx' : (purposeLabel === 'report' ? 'md' : 'json');
   const prefix = purposeLabel === 'excel' ? 'planeamento_processos' :
                  purposeLabel === 'report' ? 'sync_report' : 'planeamento_processos';
@@ -4334,6 +4437,225 @@ document.getElementById('btn-clear').onclick = async () => {
   state.records = [];
   await saveState();
   toast('Alocações removidas');
+  renderView(currentView());
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// ARQUIVO MENSAL (plan snapshots)
+// ════════════════════════════════════════════════════════════════════════
+
+async function loadPlanSnapshots() {
+  if (state.planSnapshots !== null) return state.planSnapshots;
+  try {
+    const { data } = await db.from('app_config').select('value')
+      .eq('app_id', APP_ID).eq('key', 'plan_snapshots').maybeSingle();
+    state.planSnapshots = data?.value ? JSON.parse(data.value) : [];
+  } catch { state.planSnapshots = []; }
+  return state.planSnapshots;
+}
+
+async function savePlanSnapshots() {
+  await db.from('app_config').upsert([
+    { app_id: APP_ID, key: 'plan_snapshots', value: JSON.stringify(state.planSnapshots) }
+  ], { onConflict: 'app_id,key' });
+}
+
+function openSubmitPlanModal() {
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  document.getElementById('f-plan-month').value = defaultMonth;
+  document.getElementById('f-plan-note').value = '';
+  const nProj = new Set(state.records.map(r => r.project)).size;
+  document.getElementById('plan-submit-stats').innerHTML = `
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; text-align:center">
+      <div><div style="font-size:28px; font-family:'Fraunces',serif; font-weight:500; line-height:1">${state.records.length}</div><div style="font-size:11px; color:var(--ink-faint); margin-top:4px; text-transform:uppercase; letter-spacing:0.08em">alocações</div></div>
+      <div><div style="font-size:28px; font-family:'Fraunces',serif; font-weight:500; line-height:1">${state.workers.length}</div><div style="font-size:11px; color:var(--ink-faint); margin-top:4px; text-transform:uppercase; letter-spacing:0.08em">pessoas</div></div>
+      <div><div style="font-size:28px; font-family:'Fraunces',serif; font-weight:500; line-height:1">${nProj}</div><div style="font-size:11px; color:var(--ink-faint); margin-top:4px; text-transform:uppercase; letter-spacing:0.08em">projetos</div></div>
+    </div>
+  `;
+  document.getElementById('modal-submit-plan').classList.add('active');
+}
+
+function closeSubmitPlanModal() {
+  document.getElementById('modal-submit-plan').classList.remove('active');
+}
+
+document.getElementById('btn-submit-plan').onclick = openSubmitPlanModal;
+document.getElementById('btn-submit-plan-2').onclick = openSubmitPlanModal;
+document.getElementById('modal-submit-plan-close').onclick = closeSubmitPlanModal;
+document.getElementById('sp-cancel').onclick = closeSubmitPlanModal;
+document.getElementById('modal-submit-plan').addEventListener('click', e => {
+  if (e.target.id === 'modal-submit-plan') closeSubmitPlanModal();
+});
+document.getElementById('btn-menu-submit-plan').onclick = openSubmitPlanModal;
+document.getElementById('btn-menu-arquivo').onclick = () => {
+  document.querySelector('#tabs button[data-view="arquivo"]').click();
+};
+
+document.getElementById('form-submit-plan').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const planMonth = document.getElementById('f-plan-month').value;
+  const label = document.getElementById('f-plan-note').value.trim();
+  if (!planMonth) return;
+
+  let initials = sessionCtx.checkedIn ? sessionCtx.initials : state.editorInitials;
+  if (!initials) {
+    initials = await askInitials('plan');
+    if (!initials) return;
+  }
+
+  await loadPlanSnapshots();
+
+  const snap = {
+    id: `snap_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+    submittedAt: new Date().toISOString(),
+    submittedBy: initials,
+    planMonth,
+    label: label || null,
+    stats: {
+      records: state.records.length,
+      workers: state.workers.length,
+      projects: new Set(state.records.map(r => r.project)).size,
+    },
+    workers: [...state.workers],
+    projects: state.projects.map(p => ({...p})),
+    capacity: JSON.parse(JSON.stringify(state.capacity)),
+    records: state.records.map(r => ({...r, monthsHours: {...(r.monthsHours || {})}})),
+  };
+
+  state.planSnapshots.unshift(snap);
+  try {
+    await savePlanSnapshots();
+    closeSubmitPlanModal();
+    toast(`Plano de ${ymLabel(planMonth)} guardado no arquivo`);
+    if (currentView() === 'arquivo') renderArquivo();
+  } catch (err) {
+    console.error(err);
+    state.planSnapshots.shift();
+    toast('Erro ao guardar plano no arquivo', 'error');
+  }
+});
+
+function renderArquivo() {
+  if (state.planSnapshots === null) {
+    document.getElementById('archive-empty').style.display = 'none';
+    document.getElementById('archive-table-wrap').style.display = '';
+    document.getElementById('archive-tbody').innerHTML =
+      '<tr><td colspan="8" style="text-align:center; color:var(--ink-faint); padding:40px">A carregar...</td></tr>';
+    loadPlanSnapshots().then(() => renderArquivo());
+    return;
+  }
+
+  const snaps = state.planSnapshots;
+  document.getElementById('archive-count').textContent = snaps.length;
+
+  if (snaps.length === 0) {
+    document.getElementById('archive-empty').style.display = '';
+    document.getElementById('archive-table-wrap').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('archive-empty').style.display = 'none';
+  document.getElementById('archive-table-wrap').style.display = '';
+
+  const fmtTs = iso => new Date(iso).toLocaleString('pt-PT', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  document.getElementById('archive-tbody').innerHTML = snaps.map(s => `
+    <tr>
+      <td><strong>${ymLabel(s.planMonth)}</strong></td>
+      <td style="color:var(--ink-soft)">${fmtTs(s.submittedAt)}</td>
+      <td><span class="badge">${s.submittedBy}</span></td>
+      <td style="color:var(--ink-soft)">${s.label || '—'}</td>
+      <td class="num">${s.stats.records}</td>
+      <td class="num">${s.stats.workers}</td>
+      <td class="num">${s.stats.projects}</td>
+      <td class="actions">
+        <button class="btn btn-sm" onclick="viewSnapshot('${s.id}')">Ver</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+let _currentSnapshotId = null;
+
+window.viewSnapshot = function(id) {
+  const s = (state.planSnapshots || []).find(x => x.id === id);
+  if (!s) return;
+  _currentSnapshotId = id;
+
+  const fmtTs = iso => new Date(iso).toLocaleString('pt-PT', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  document.getElementById('snapshot-modal-title').textContent = `Plano de ${ymLabel(s.planMonth)}`;
+  document.getElementById('snapshot-modal-meta').innerHTML =
+    `Submetido em ${fmtTs(s.submittedAt)} por <strong>${s.submittedBy}</strong>${s.label ? ` · <em>${s.label}</em>` : ''}`;
+
+  const workerSummary = {};
+  for (const r of (s.records || [])) {
+    if (!workerSummary[r.worker]) workerSummary[r.worker] = { projects: new Set(), totalHours: 0 };
+    workerSummary[r.worker].projects.add(r.project);
+    workerSummary[r.worker].totalHours += r.totalHours || 0;
+  }
+
+  const rows = Object.entries(workerSummary)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([w, d]) => `
+      <tr>
+        <td>${w}</td>
+        <td style="color:var(--ink-soft)">${[...d.projects].sort().join(', ')}</td>
+        <td class="num">${Math.round(d.totalHours)}h</td>
+      </tr>
+    `).join('');
+
+  document.getElementById('snapshot-modal-body').innerHTML = `
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px">
+      <div class="stat"><div class="stat-label">Alocações</div><div class="stat-value">${s.stats.records}</div></div>
+      <div class="stat"><div class="stat-label">Pessoas</div><div class="stat-value">${s.stats.workers}</div></div>
+      <div class="stat"><div class="stat-label">Projetos</div><div class="stat-value">${s.stats.projects}</div></div>
+    </div>
+    <div class="table-wrap" style="max-height:380px; overflow-y:auto; border:1px solid var(--line); border-radius:6px">
+      <table class="data">
+        <thead><tr><th>Pessoa</th><th>Projetos</th><th style="text-align:right">Total horas</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" style="text-align:center;color:var(--ink-faint);padding:20px">Sem alocações neste plano</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('modal-snapshot').classList.add('active');
+};
+
+document.getElementById('modal-snapshot-close').onclick = () =>
+  document.getElementById('modal-snapshot').classList.remove('active');
+document.getElementById('snapshot-close-btn').onclick = () =>
+  document.getElementById('modal-snapshot').classList.remove('active');
+document.getElementById('modal-snapshot').addEventListener('click', e => {
+  if (e.target.id === 'modal-snapshot') document.getElementById('modal-snapshot').classList.remove('active');
+});
+
+document.getElementById('snapshot-delete-btn').onclick = async () => {
+  if (!confirm('Eliminar este plano do arquivo? Esta ação não pode ser revertida.')) return;
+  state.planSnapshots = state.planSnapshots.filter(s => s.id !== _currentSnapshotId);
+  await savePlanSnapshots();
+  document.getElementById('modal-snapshot').classList.remove('active');
+  toast('Plano eliminado do arquivo');
+  renderArquivo();
+};
+
+document.getElementById('snapshot-restore-btn').onclick = async () => {
+  const s = (state.planSnapshots || []).find(x => x.id === _currentSnapshotId);
+  if (!s) return;
+  if (!confirm(`Restaurar o estado do plano de ${ymLabel(s.planMonth)}?\nO estado atual será substituído.`)) return;
+  state.workers = [...s.workers];
+  state.projects = s.projects.map(p => ({...p}));
+  state.capacity = JSON.parse(JSON.stringify(s.capacity));
+  state.records = s.records.map(r => ({...r, monthsHours: {...(r.monthsHours || {})}}));
+  await saveState();
+  document.getElementById('modal-snapshot').classList.remove('active');
+  toast(`Estado de ${ymLabel(s.planMonth)} restaurado`);
+  resetUIFilters();
   renderView(currentView());
 };
 
