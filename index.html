@@ -3274,9 +3274,10 @@ function renderGantt() {
             ${hideName ? '' : `<span class="gb-name">${label}</span>`}
             <span class="gb-pm">${pmDisplay} PM</span>`;
         } else {
+          const compactLabel = ganttView.unit === 'h' ? `${round2(hRange)}h` : `${pmDisplay} PM`;
           barInner = `<div class="gb-handle gb-h-left" data-handle="left"></div>
             ${hideName ? '' : `<span class="gb-name">${label}</span>`}
-            <span class="gb-pm">${pmDisplay} PM</span>
+            <span class="gb-pm">${compactLabel}</span>
             <div class="gb-handle gb-h-right" data-handle="right"></div>`;
         }
 
@@ -3379,7 +3380,7 @@ function renderGantt() {
       if (b.dataset.unit === ganttView.unit) return;
       ganttView.unit = b.dataset.unit;
       unitSeg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.unit === ganttView.unit));
-      if (ganttView.mode === 'monthly') draw();
+      draw();
     };
   });
 }
