@@ -1,4 +1,5 @@
 # GitLab Pages — deploys index.html on every push to main
+# Runner: Windows PowerShell shell executor
 
 stages:
   - deploy
@@ -6,10 +7,11 @@ stages:
 pages:
   stage: deploy
   script:
-    - mkdir -p public
-    - cp index.html public/index.html
-    - mkdir -p public/data
-    - cp data/state.json public/data/state.json 2>/dev/null || true
+    - New-Item -ItemType Directory -Force -Path public | Out-Null
+    - Copy-Item index.html public\index.html
+    - New-Item -ItemType Directory -Force -Path public\data | Out-Null
+    - if (Test-Path data\state.json) { Copy-Item data\state.json public\data\state.json }
+    - Write-Host "Contents of public/"; Get-ChildItem public -Recurse
   artifacts:
     paths:
       - public
