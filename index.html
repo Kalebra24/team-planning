@@ -1855,39 +1855,38 @@ async function logChange(action, entityType, entityId, entityName, summary) {
   // Changelog is persisted on the next saveState() call (non-blocking)
 }
 
-async function checkIn() {
-  const initials = await askInitials('check-in');
-  if (!initials) return;
-
-  // Find last checkout for this user in the local sessions list
+// Chamado após autenticação OAuth bem-sucedida
+async function doCheckIn(username, displayName) {
+  const label = displayName || username;
   const prevSession = (state.sessions || [])
-    .filter(s => s.user_initials === initials && s.checked_out_at)
+    .filter(s => s.user_initials === username && s.checked_out_at)
     .sort((a, b) => b.checked_out_at.localeCompare(a.checked_out_at))[0];
 
   const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-  const sessionEntry = {
-    id: sessionId,
-    app_id: APP_ID,
-    user_initials: initials,
-    checked_in_at: new Date().toISOString(),
-    checked_out_at: null,
-    is_active: true,
-  };
   if (!state.sessions) state.sessions = [];
-  state.sessions.unshift(sessionEntry);
+  state.sessions.unshift({
+    id: sessionId, app_id: APP_ID,
+    user_initials: username, user_name: displayName || username,
+    checked_in_at: new Date().toISOString(),
+    checked_out_at: null, is_active: true,
+  });
   if (state.sessions.length > 100) state.sessions.length = 100;
 
-  sessionCtx.id = sessionId;
-  sessionCtx.initials = initials;
-  sessionCtx.checkedIn = true;
-  sessionCtx.checkedInAt = sessionEntry.checked_in_at;
+  sessionCtx.id         = sessionId;
+  sessionCtx.initials   = username;
+  sessionCtx.checkedIn  = true;
+  sessionCtx.checkedInAt = state.sessions[0].checked_in_at;
 
-  if (state.editorInitials !== initials) state.editorInitials = initials;
+  if (state.editorInitials !== username) state.editorInitials = username;
   await saveState();
   updateCheckinUI();
-  toast(`Sessão iniciada · ${initials}`);
+  toast(`Sessão iniciada · ${label}`);
+  await showChangelogModal(prevSession?.checked_out_at || null, username);
+}
 
-  await showChangelogModal(prevSession?.checked_out_at || null, initials);
+// "Entrar" — redireciona para login GitLab da empresa
+async function checkIn() {
+  await OAUTH.login();
 }
 
 async function checkOut() {
@@ -1895,13 +1894,14 @@ async function checkOut() {
   const now = new Date().toISOString();
   const sess = (state.sessions || []).find(s => s.id === sessionCtx.id);
   if (sess) { sess.checked_out_at = now; sess.is_active = false; }
-  const initials = sessionCtx.initials;
+  const label = sessionCtx.initials;
   sessionCtx.id = null;
   sessionCtx.checkedIn = false;
   sessionCtx.checkedInAt = null;
+  OAUTH.logout();
   await saveState();
   updateCheckinUI();
-  toast(`Sessão terminada · ${initials}`);
+  toast(`Sessão terminada · ${label}`);
 }
 
 async function showChangelogModal(since, currentUser) {
@@ -1967,6 +1967,115 @@ function updateCheckinUI() {
     if (banner) banner.style.display = 'flex';
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// GITLAB OAUTH  (Authorization Code + PKCE — sem servidor, sem segredo)
+// ════════════════════════════════════════════════════════════════════════
+const OAUTH = {
+  clientId:    '33a3f19adc5d27b42cafb6c3369766acc8c9d6602820a9f85af429781226767e',
+  redirectUri: 'https://gitpages.inegi.up.pt/planeamento-d9a840/',
+  baseUrl:     'https://git.inegi.up.pt',
+  scope:       'read_user',
+
+  // ── PKCE helpers ────────────────────────────────────────────────────
+  async _verifier() {
+    const arr = new Uint8Array(32);
+    crypto.getRandomValues(arr);
+    return btoa(String.fromCharCode(...arr))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  },
+  async _challenge(v) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+    return btoa(String.fromCharCode(...new Uint8Array(buf)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  },
+
+  // ── Iniciar login — redireciona para GitLab ─────────────────────────
+  async login() {
+    const verifier   = await this._verifier();
+    const challenge  = await this._challenge(verifier);
+    const state      = crypto.randomUUID();
+    localStorage.setItem('oauth_v', verifier);
+    localStorage.setItem('oauth_s', state);
+    const p = new URLSearchParams({
+      client_id: this.clientId, redirect_uri: this.redirectUri,
+      response_type: 'code', scope: this.scope, state,
+      code_challenge: challenge, code_challenge_method: 'S256',
+    });
+    window.location.href = `${this.baseUrl}/oauth/authorize?${p}`;
+  },
+
+  // ── Tratar callback (código na URL) ─────────────────────────────────
+  async handleCallback() {
+    const p    = new URLSearchParams(window.location.search);
+    const code = p.get('code');
+    if (!code) return false;
+    if (p.get('state') !== localStorage.getItem('oauth_s')) return false;
+    const verifier = localStorage.getItem('oauth_v');
+    localStorage.removeItem('oauth_v');
+    localStorage.removeItem('oauth_s');
+
+    const res = await fetch(`${this.baseUrl}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: this.clientId, grant_type: 'authorization_code',
+        code, redirect_uri: this.redirectUri, code_verifier: verifier,
+      }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    localStorage.setItem('oauth_token', data.access_token);
+    localStorage.setItem('oauth_exp',   Date.now() + (data.expires_in || 7200) * 1000);
+    if (data.refresh_token) localStorage.setItem('oauth_refresh', data.refresh_token);
+    window.history.replaceState({}, '', window.location.pathname);
+    return true;
+  },
+
+  // ── Refrescar token automaticamente ─────────────────────────────────
+  async _tryRefresh() {
+    const rt = localStorage.getItem('oauth_refresh');
+    if (!rt) return false;
+    const res = await fetch(`${this.baseUrl}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: this.clientId, grant_type: 'refresh_token', refresh_token: rt,
+      }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    localStorage.setItem('oauth_token', data.access_token);
+    localStorage.setItem('oauth_exp',   Date.now() + (data.expires_in || 7200) * 1000);
+    if (data.refresh_token) localStorage.setItem('oauth_refresh', data.refresh_token);
+    return true;
+  },
+
+  // ── Obter token válido (refresca se necessário) ──────────────────────
+  async getToken() {
+    const token = localStorage.getItem('oauth_token');
+    const exp   = Number(localStorage.getItem('oauth_exp') || 0);
+    if (!token) return null;
+    if (Date.now() < exp - 60000) return token;       // ainda válido
+    const ok = await this._tryRefresh();
+    return ok ? localStorage.getItem('oauth_token') : null;
+  },
+
+  // ── Obter utilizador autenticado ────────────────────────────────────
+  async getUser() {
+    const token = await this.getToken();
+    if (!token) return null;
+    const res = await fetch(`${this.baseUrl}/api/v4/user`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return res.ok ? res.json() : null;
+  },
+
+  // ── Logout ───────────────────────────────────────────────────────────
+  logout() {
+    ['oauth_token','oauth_exp','oauth_refresh'].forEach(k => localStorage.removeItem(k));
+  },
+};
 
 // ════════════════════════════════════════════════════════════════════════
 // PERSISTENCE — GitLab Repository Files API
@@ -4956,11 +5065,25 @@ document.getElementById('modal-changelog').addEventListener('click', e => {
 // INIT
 // ════════════════════════════════════════════════════════════════════════
 (async function init() {
+  // 1. Tratar callback OAuth (código na URL após redirect do GitLab)
+  if (new URLSearchParams(window.location.search).has('code')) {
+    const ok = await OAUTH.handleCallback();
+    if (!ok) { toast('Erro no login GitLab', 'error'); }
+  }
+
+  // 2. Carregar dados
   const had = await loadState();
   if (!had) {
     await seedFromExcel();
     toast('Dados iniciais carregados');
   }
+
+  // 3. Auto-login se já houver token OAuth válido
+  if (!sessionCtx.checkedIn) {
+    const user = await OAUTH.getUser();
+    if (user) await doCheckIn(user.username, user.name);
+  }
+
   updateCheckinUI();
   renderDashboard();
 })();
