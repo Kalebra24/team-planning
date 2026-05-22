@@ -1,16 +1,15 @@
-# GitLab Pages — deploys index.html to the static site on every push to main
+# GitLab Pages — deploys index.html on every push to main
 
 stages:
   - deploy
 
 pages:
   stage: deploy
-  image: busybox:latest
   script:
     - mkdir -p public
     - cp index.html public/index.html
     - mkdir -p public/data
-    - "[ -f data/state.json ] && cp data/state.json public/data/state.json || true"
+    - cp data/state.json public/data/state.json 2>/dev/null || true
   artifacts:
     paths:
       - public
