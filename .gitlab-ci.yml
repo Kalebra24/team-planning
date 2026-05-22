@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────
+# GitLab Pages — deploy index.html as a static site
+# Accessible at:  https://<namespace>.gitlab.io/<project>/
+# ─────────────────────────────────────────────────────────
+
+stages:
+  - deploy
+
+pages:
+  stage: deploy
+  image: busybox:latest
+  script:
+    - mkdir -p public
+    - cp index.html public/index.html
+    # Preserve data directory (state.json lives here, managed via API)
+    - mkdir -p public/data
+    - "[ -f data/state.json ] && cp data/state.json public/data/state.json || true"
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

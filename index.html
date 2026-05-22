@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- GitLab Files API backend — no external SDK needed -->
 <style>
   :root {
     --bg: #f6f4ee;
@@ -1745,6 +1745,32 @@
   </div>
 </div>
 
+<!-- ═══════════ MODAL: GITLAB TOKEN ═══════════ -->
+<div class="modal-bg" id="modal-gitlab-config">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <div class="modal-title">Token de acesso GitLab</div>
+    </div>
+    <p style="margin-bottom:8px; font-size:13px; color:var(--ink-soft)">
+      Para carregar e guardar dados precisas de um <strong>Personal Access Token</strong> com scope <strong>api</strong>.
+    </p>
+    <p style="margin-bottom:16px; font-size:12px; color:var(--ink-faint)">
+      Em <code style="font-family:'JetBrains Mono',monospace; background:var(--bg); padding:1px 5px; border-radius:3px">git.inegi.up.pt → Preferências → Access Tokens → Add new token</code>. O token fica guardado apenas neste browser.
+    </p>
+    <form id="form-gitlab-config">
+      <div class="field">
+        <label for="f-gl-token">Personal Access Token</label>
+        <input type="password" id="f-gl-token" required autofocus placeholder="glpat-…" style="font-family:'JetBrains Mono',monospace; font-size:14px; letter-spacing:0.04em">
+      </div>
+      <p id="gl-config-error" style="display:none; margin-top:12px; font-size:12px; color:var(--danger); background:var(--danger-bg); padding:8px 10px; border-radius:5px"></p>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line-soft)">
+        <button type="button" class="btn" id="gl-config-cancel">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="gl-config-save">Ligar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- ═══════════ MODAL: NOVA/EDIT ALOCAÇÃO ═══════════ -->
 <div class="modal-bg" id="modal">
   <div class="modal">
@@ -1821,10 +1847,12 @@ const state = {
   lastSyncBaseline: null,  // {timestamp, recordsById: {id: {hash, updatedAt}}} - estado no último sync
   editorInitials: '',      // iniciais do autor (persistente, usadas no nome dos ficheiros)
   planSnapshots: null,     // null = not loaded yet; array once loaded
+  changelog: [],           // últimas 200 entradas do diário de alterações
+  sessions: [],            // historial de sessões (últimas 100)
 };
 
 // ════════════════════════════════════════════════════════════════════════
-// SESSION (check-in / check-out)
+// SESSION (check-in / check-out) — local, persisted in state.sessions
 // ════════════════════════════════════════════════════════════════════════
 const sessionCtx = {
   id: null,
@@ -1835,73 +1863,78 @@ const sessionCtx = {
 
 async function logChange(action, entityType, entityId, entityName, summary) {
   if (!sessionCtx.checkedIn || !sessionCtx.id) return;
-  try {
-    await db.from('changelog').insert({
-      app_id: APP_ID,
-      session_id: sessionCtx.id,
-      user_initials: sessionCtx.initials,
-      action,
-      entity_type: entityType,
-      entity_id: entityId || null,
-      entity_name: entityName || null,
-      summary: summary || null,
-    });
-  } catch (_) { /* non-fatal */ }
+  const entry = {
+    id: `cl_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+    app_id: APP_ID,
+    session_id: sessionCtx.id,
+    user_initials: sessionCtx.initials,
+    action,
+    entity_type: entityType,
+    entity_id: entityId || null,
+    entity_name: entityName || null,
+    summary: summary || null,
+    changed_at: new Date().toISOString(),
+  };
+  if (!state.changelog) state.changelog = [];
+  state.changelog.unshift(entry);
+  if (state.changelog.length > 200) state.changelog.length = 200;
+  // Changelog is persisted on the next saveState() call (non-blocking)
 }
 
 async function checkIn() {
+  if (!GL.isConfigured()) { openGitLabConfig(); return; }
   const initials = await askInitials('check-in');
   if (!initials) return;
 
-  // Find last checkout for this user to show changes since then
-  const { data: prevSessions } = await db.from('sessions')
-    .select('checked_out_at')
-    .eq('app_id', APP_ID)
-    .eq('user_initials', initials)
-    .not('checked_out_at', 'is', null)
-    .order('checked_out_at', { ascending: false })
-    .limit(1);
+  // Find last checkout for this user in the local sessions list
+  const prevSession = (state.sessions || [])
+    .filter(s => s.user_initials === initials && s.checked_out_at)
+    .sort((a, b) => b.checked_out_at.localeCompare(a.checked_out_at))[0];
 
-  const { data: session, error } = await db.from('sessions')
-    .insert({ app_id: APP_ID, user_initials: initials })
-    .select()
-    .single();
-  if (error) { toast('Erro ao iniciar sessão', 'error'); return; }
+  const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+  const sessionEntry = {
+    id: sessionId,
+    app_id: APP_ID,
+    user_initials: initials,
+    checked_in_at: new Date().toISOString(),
+    checked_out_at: null,
+    is_active: true,
+  };
+  if (!state.sessions) state.sessions = [];
+  state.sessions.unshift(sessionEntry);
+  if (state.sessions.length > 100) state.sessions.length = 100;
 
-  sessionCtx.id = session.id;
+  sessionCtx.id = sessionId;
   sessionCtx.initials = initials;
   sessionCtx.checkedIn = true;
-  sessionCtx.checkedInAt = session.checked_in_at;
+  sessionCtx.checkedInAt = sessionEntry.checked_in_at;
 
-  if (state.editorInitials !== initials) {
-    state.editorInitials = initials;
-    await saveState();
-  }
-
+  if (state.editorInitials !== initials) state.editorInitials = initials;
+  await saveState();
   updateCheckinUI();
   toast(`Sessão iniciada · ${initials}`);
 
-  const lastOut = prevSessions?.[0]?.checked_out_at;
-  await showChangelogModal(lastOut || null, initials);
+  await showChangelogModal(prevSession?.checked_out_at || null, initials);
 }
 
 async function checkOut() {
   if (!sessionCtx.checkedIn || !sessionCtx.id) return;
   const now = new Date().toISOString();
-  await db.from('sessions').update({ checked_out_at: now, is_active: false }).eq('id', sessionCtx.id);
+  const sess = (state.sessions || []).find(s => s.id === sessionCtx.id);
+  if (sess) { sess.checked_out_at = now; sess.is_active = false; }
   const initials = sessionCtx.initials;
   sessionCtx.id = null;
   sessionCtx.checkedIn = false;
   sessionCtx.checkedInAt = null;
+  await saveState();
   updateCheckinUI();
   toast(`Sessão terminada · ${initials}`);
 }
 
 async function showChangelogModal(since, currentUser) {
-  let query = db.from('changelog').select('*').eq('app_id', APP_ID).order('changed_at', { ascending: false }).limit(200);
-  if (since) query = query.gt('changed_at', since);
-  let entries = [];
-  try { const { data } = await query; entries = data || []; } catch (_) { entries = []; }
+  const entries = (state.changelog || [])
+    .filter(e => !since || e.changed_at > since)
+    .slice(0, 200);
 
   const sinceEl = document.getElementById('changelog-since');
   const body = document.getElementById('changelog-body');
@@ -1963,86 +1996,77 @@ function updateCheckinUI() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// PERSISTENCE
+// PERSISTENCE — GitLab Repository Files API
 // ════════════════════════════════════════════════════════════════════════
-// ── SUPABASE CONFIG ── replace with your project values ──────────────────
-const SUPABASE_URL      = 'https://potcxtlldjwngvakuvwq.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_zD60byD3EaAr3F8_eswP9A_3ZBaUurU';
-const APP_ID            = 'team-planning';
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Hardcoded GitLab instance — only the user's Personal Access Token
+// (scope: api) is stored in localStorage under the key 'gl_token'.
+// Dados guardados em:  data/state.json  (ramo: main)
+
+const GL = {
+  baseUrl:   'https://git.inegi.up.pt',
+  projectId: '192',
+  get token() { return localStorage.getItem('gl_token') || ''; },
+  dataPath: 'data%2Fstate.json',
+  branch:   'main',
+
+  headers() {
+    return { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': this.token };
+  },
+
+  isConfigured() {
+    return !!this.token;
+  },
+
+  async readFile() {
+    const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}/raw?ref=${this.branch}&ts=${Date.now()}`;
+    const res = await fetch(url, { headers: this.headers() });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GitLab read ${res.status}: ${await res.text()}`);
+    return res.json();
+  },
+
+  async writeFile(data, message) {
+    const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}`;
+    const body = JSON.stringify({
+      branch: this.branch,
+      commit_message: message || `chore: update planning state [${new Date().toISOString().slice(0,16)}]`,
+      content: JSON.stringify(data, null, 2),
+    });
+    let res = await fetch(url, { method: 'PUT', headers: this.headers(), body });
+    if (res.status === 400 || res.status === 404) {
+      // Ficheiro ainda não existe — criar
+      res = await fetch(url, { method: 'POST', headers: this.headers(), body });
+    }
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.message || `GitLab write ${res.status}`);
+    }
+  },
+};
+
+const APP_ID = 'team-planning';
 
 async function saveState() {
+  if (!GL.isConfigured()) return;
   try {
-    // Garantir que todos os records têm updatedAt
     const now = new Date().toISOString();
-    for (const r of state.records) {
-      if (!r.updatedAt) r.updatedAt = now;
-    }
-    const workerRows = state.workers.map(name => ({ app_id: APP_ID, name }));
-    const projectRows = state.projects.map(p => ({ app_id: APP_ID, name: p.name, active: p.active }));
-    const recordRows = state.records.map(r => ({
-      app_id: APP_ID,
-      id: r.id,
-      team: r.team || null,
-      worker: r.worker || null,
-      project: r.project || null,
-      wp: r.wp || null,
-      task: r.task || null,
-      start_date: r.start || null,
-      end_date: r.end || null,
-      total_hours: r.totalHours || 0,
-      months_hours: r.monthsHours || {},
-      updated_at: r.updatedAt,
-    }));
-    const capacityRows = [];
-    for (const [worker, months] of Object.entries(state.capacity)) {
-      for (const [ym, hours] of Object.entries(months)) {
-        capacityRows.push({ app_id: APP_ID, worker, ym, hours });
-      }
-    }
-
-    // Upsert current state and fetch existing keys in parallel
-    const results = await Promise.all([
-      workerRows.length   ? db.from('workers').upsert(workerRows, { onConflict: 'app_id,name' })          : Promise.resolve({}),
-      projectRows.length  ? db.from('projects').upsert(projectRows, { onConflict: 'app_id,name' })        : Promise.resolve({}),
-      recordRows.length   ? db.from('records').upsert(recordRows, { onConflict: 'id' })                   : Promise.resolve({}),
-      capacityRows.length ? db.from('capacity').upsert(capacityRows, { onConflict: 'app_id,worker,ym' })  : Promise.resolve({}),
-      db.from('app_config').upsert([
-        { app_id: APP_ID, key: 'editorInitials',   value: state.editorInitials || '' },
-        { app_id: APP_ID, key: 'lastSyncBaseline', value: JSON.stringify(state.lastSyncBaseline || null) },
-      ], { onConflict: 'app_id,key' }),
-      db.from('workers').select('name').eq('app_id', APP_ID),
-      db.from('projects').select('name').eq('app_id', APP_ID),
-      db.from('records').select('id').eq('app_id', APP_ID),
-      db.from('capacity').select('worker, ym').eq('app_id', APP_ID),
-    ]);
-    const [,,,,,{ data: dbWorkers }, { data: dbProjects }, { data: dbRecords }, { data: dbCap }] = results;
-
-    // Delete rows that were removed from local state
-    const currentWorkers    = new Set(state.workers);
-    const currentProjects   = new Set(state.projects.map(p => p.name));
-    const currentRecordIds  = new Set(state.records.map(r => r.id));
-    const currentCapKeys    = new Set(capacityRows.map(c => `${c.worker}|${c.ym}`));
-
-    const staleWorkers    = (dbWorkers  || []).filter(w => !currentWorkers.has(w.name)).map(w => w.name);
-    const staleProjects   = (dbProjects || []).filter(p => !currentProjects.has(p.name)).map(p => p.name);
-    const staleRecords    = (dbRecords  || []).filter(r => !currentRecordIds.has(r.id)).map(r => r.id);
-    const staleCapWorkers = [...new Set(
-      (dbCap || [])
-        .filter(c => !currentCapKeys.has(`${c.worker}|${c.ym}`) && !currentWorkers.has(c.worker))
-        .map(c => c.worker)
-    )];
-
-    const deleteOps = [
-      staleWorkers.length    ? db.from('workers').delete().eq('app_id', APP_ID).in('name', staleWorkers)       : null,
-      staleProjects.length   ? db.from('projects').delete().eq('app_id', APP_ID).in('name', staleProjects)     : null,
-      staleRecords.length    ? db.from('records').delete().in('id', staleRecords)                              : null,
-      staleCapWorkers.length ? db.from('capacity').delete().eq('app_id', APP_ID).in('worker', staleCapWorkers) : null,
-    ].filter(Boolean);
-    if (deleteOps.length) await Promise.all(deleteOps);
+    for (const r of state.records) if (!r.updatedAt) r.updatedAt = now;
+    await GL.writeFile({
+      workers:   state.workers,
+      projects:  state.projects,
+      records:   state.records,
+      capacity:  state.capacity,
+      config: {
+        editorInitials:   state.editorInitials   || '',
+        lastSyncBaseline: state.lastSyncBaseline || null,
+        plan_snapshots:   state.planSnapshots    || [],
+      },
+      changelog: (state.changelog || []).slice(0, 200),
+      sessions:  (state.sessions  || []).slice(0, 100),
+    });
   } catch (e) {
-    console.error('Erro a guardar no Supabase:', e);
-    toast('Erro a guardar no Supabase', 'error');
+    console.error('Erro a guardar no GitLab:', e);
+    toast('Erro a guardar no GitLab', 'error');
   }
 }
 
@@ -2053,82 +2077,55 @@ function markUpdated(rec) {
 
 // Hash determinístico para detetar alterações materiais a um registo
 function recordContentHash(r) {
-  // Excluir updatedAt e id - só conteúdo
   const months = Object.keys(r.monthsHours || {}).sort()
     .map(k => `${k}:${round2(r.monthsHours[k])}`).join('|');
   return [
-    r.worker || '',
-    r.project || '',
-    r.wp || '',
-    r.task || '',
-    r.team || '',
-    r.start || '',
-    r.end || '',
-    round2(r.totalHours || 0),
-    months,
+    r.worker || '', r.project || '', r.wp || '', r.task || '', r.team || '',
+    r.start  || '', r.end     || '', round2(r.totalHours || 0), months,
   ].join('§');
 }
 
 async function loadState() {
+  if (!GL.isConfigured()) return false;
   try {
-    const [
-      { data: workers,  error: e1 },
-      { data: projects, error: e2 },
-      { data: records,  error: e3 },
-      { data: capacity, error: e4 },
-      { data: config,   error: e5 },
-    ] = await Promise.all([
-      db.from('workers').select('name').eq('app_id', APP_ID).order('name'),
-      db.from('projects').select('name, active').eq('app_id', APP_ID).order('name'),
-      db.from('records').select('*').eq('app_id', APP_ID),
-      db.from('capacity').select('worker, ym, hours').eq('app_id', APP_ID),
-      db.from('app_config').select('key, value').eq('app_id', APP_ID),
-    ]);
-    if (e1 || e2 || e3 || e4 || e5) throw e1 || e2 || e3 || e4 || e5;
-    if (!workers || workers.length === 0) return false;
+    const data = await GL.readFile();
+    if (!data || !data.workers || data.workers.length === 0) return false;
 
-    state.workers  = workers.map(w => w.name);
-    state.projects = (projects || []).map(p => ({ name: p.name, active: p.active }));
-    state.records  = (records  || []).map(r => ({
-      id:         r.id,
-      team:       r.team,
-      worker:     r.worker,
-      project:    r.project,
-      wp:         r.wp,
-      task:       r.task,
-      start:      r.start_date,
-      end:        r.end_date,
-      totalHours: r.total_hours,
-      monthsHours: r.months_hours || {},
-      updatedAt:  r.updated_at,
+    state.workers   = data.workers  || [];
+    state.projects  = data.projects || [];
+    state.records   = (data.records || []).map(r => ({
+      id:          r.id,
+      team:        r.team,
+      worker:      r.worker,
+      project:     r.project,
+      wp:          r.wp,
+      task:        r.task,
+      start:       r.start_date  ?? r.start,
+      end:         r.end_date    ?? r.end,
+      totalHours:  r.total_hours ?? r.totalHours,
+      monthsHours: r.months_hours ?? r.monthsHours ?? {},
+      updatedAt:   r.updated_at  ?? r.updatedAt,
     }));
-
-    state.capacity = {};
-    for (const row of (capacity || [])) {
-      if (!state.capacity[row.worker]) state.capacity[row.worker] = {};
-      state.capacity[row.worker][row.ym] = row.hours;
-    }
-
-    const configMap = Object.fromEntries((config || []).map(c => [c.key, c.value]));
-    state.editorInitials   = configMap.editorInitials || '';
-    state.lastSyncBaseline = configMap.lastSyncBaseline
-      ? JSON.parse(configMap.lastSyncBaseline)
-      : null;
+    state.capacity  = data.capacity || {};
+    const cfg = data.config || {};
+    state.editorInitials   = cfg.editorInitials   || '';
+    state.lastSyncBaseline = cfg.lastSyncBaseline || null;
+    state.planSnapshots    = cfg.plan_snapshots   || [];
+    state.changelog        = data.changelog       || [];
+    state.sessions         = data.sessions        || [];
     return true;
   } catch (e) {
-    // Não existe ainda - usar seed
+    console.error('loadState error:', e);
+    toast('Erro ao carregar dados do GitLab', 'error');
   }
   return false;
 }
 
 async function seedFromExcel() {
-  state.workers = [...SEED_DATA.workers];
-  state.projects = [...SEED_DATA.projects];
-  state.capacity = {...SEED_DATA.capacityByWorker};
-  state.records = SEED_DATA.records.map((r, i) => ({
-    id: `rec_${Date.now()}_${i}`,
-    ...r,
-  }));
+  state.workers   = [...SEED_DATA.workers];
+  state.projects  = [...SEED_DATA.projects];
+  state.capacity  = {...SEED_DATA.capacityByWorker};
+  state.records   = SEED_DATA.records.map((r, i) => ({ id: `rec_${Date.now()}_${i}`, ...r }));
   await saveState();
 }
 
@@ -4752,19 +4749,15 @@ document.getElementById('btn-clear').onclick = async () => {
 // ════════════════════════════════════════════════════════════════════════
 
 async function loadPlanSnapshots() {
+  // Snapshots are embedded in the main state file — already loaded by loadState()
   if (state.planSnapshots !== null) return state.planSnapshots;
-  try {
-    const { data } = await db.from('app_config').select('value')
-      .eq('app_id', APP_ID).eq('key', 'plan_snapshots').maybeSingle();
-    state.planSnapshots = data?.value ? JSON.parse(data.value) : [];
-  } catch { state.planSnapshots = []; }
+  state.planSnapshots = [];
   return state.planSnapshots;
 }
 
 async function savePlanSnapshots() {
-  await db.from('app_config').upsert([
-    { app_id: APP_ID, key: 'plan_snapshots', value: JSON.stringify(state.planSnapshots) }
-  ], { onConflict: 'app_id,key' });
+  // Snapshots are persisted as part of saveState()
+  await saveState();
 }
 
 function openSubmitPlanModal() {
@@ -4991,16 +4984,72 @@ document.getElementById('modal-changelog').addEventListener('click', e => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
+// GITLAB CONFIG MODAL
+// ════════════════════════════════════════════════════════════════════════
+function openGitLabConfig(onSuccess) {
+  document.getElementById('f-gl-token').value = localStorage.getItem('gl_token') || '';
+  const errEl = document.getElementById('gl-config-error');
+  errEl.style.display = 'none';
+  document.getElementById('modal-gitlab-config').classList.add('active');
+  setTimeout(() => document.getElementById('f-gl-token').focus(), 50);
+
+  document.getElementById('form-gitlab-config').onsubmit = async (e) => {
+    e.preventDefault();
+    const token = document.getElementById('f-gl-token').value.trim();
+    const btn   = document.getElementById('gl-config-save');
+
+    btn.disabled = true;
+    btn.textContent = 'A verificar…';
+    errEl.style.display = 'none';
+
+    // Validate token by reading project metadata
+    try {
+      const res = await fetch(
+        `${GL.baseUrl}/api/v4/projects/${encodeURIComponent(GL.projectId)}`,
+        { headers: { 'PRIVATE-TOKEN': token } }
+      );
+      if (!res.ok) throw new Error(`${res.status} — token inválido ou sem acesso ao projeto`);
+    } catch (err) {
+      errEl.textContent = String(err.message || 'Erro de ligação ao GitLab');
+      errEl.style.display = '';
+      btn.disabled = false;
+      btn.textContent = 'Ligar';
+      return;
+    }
+
+    localStorage.setItem('gl_token', token);
+    document.getElementById('modal-gitlab-config').classList.remove('active');
+    btn.disabled = false;
+    btn.textContent = 'Ligar';
+    toast('Token configurado ✓');
+    if (typeof onSuccess === 'function') onSuccess();
+  };
+
+  document.getElementById('gl-config-cancel').onclick = () =>
+    document.getElementById('modal-gitlab-config').classList.remove('active');
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════════
-(async function init() {
+async function bootApp() {
   const had = await loadState();
   if (!had) {
     await seedFromExcel();
-    toast('Dados iniciais carregados do Excel');
+    toast('Dados iniciais carregados');
   }
   updateCheckinUI();
   renderDashboard();
+}
+
+(async function init() {
+  if (!GL.isConfigured()) {
+    updateCheckinUI();
+    renderDashboard();
+    openGitLabConfig(() => bootApp());
+    return;
+  }
+  await bootApp();
 })();
 </script>
 </body>
