@@ -1,211 +1,162 @@
 # Planeamento de Recursos · Equipa Processos
 
-Aplicação web de planeamento de recursos humanos para a Equipa Processos. Permite gerir alocações mensais por pessoa e projeto, detetar sobrealocações, arquivar planos mensais e colaborar em equipa através de sessões de edição com registo de alterações.
+Aplicação web de planeamento de recursos humanos para a Equipa de Processos do INEGI.
+Gere alocações mensais por pessoa e projeto, deteta sobrealocações, arquiva planos mensais
+e regista todas as alterações com identificação do autor.
 
-Funciona inteiramente num único ficheiro `index.html`, sem servidor de aplicação — os dados são persistidos no **Supabase**.
+**URL da aplicação:** https://gitpages.inegi.up.pt/planeamento-d9a840/
 
 ---
 
 ## Funcionalidades
 
-### Dashboard
-- Utilização média da equipa no mês atual
-- Deteção de pessoas em risco de lacuna nos próximos 3 meses
-- Painel "Próximo mês" com carga planeada por pessoa (verde / âmbar / vermelho)
-- Alertas de sobrealocação >110%
-- Gráfico de barras de capacidade vs alocação por pessoa — seleção de ano e mês
-
-### Alocações
-- Tabela CRUD de registos de alocação (pessoa, projeto, WP, atividade, datas, horas)
-- Filtros por pessoa e projeto
-- Pesquisa por texto livre
-
-### Heatmap
-- Mapa de calor de utilização por pessoa × mês
-- Escala a 5 níveis: 0–25% / 26–75% / 76–95% / 96–110% / >110%
-- Atalhos de período (próx. 12 meses, próx. 6 meses, ano corrente)
-
-### Timeline (Gantt)
-- Vista Gantt por pessoa com barras de alocação arrastáveis e redimensionáveis
-- Modo mensal: edição inline de horas por mês diretamente na barra
-- Filtro multi-seleção por pessoa e projeto
-- Alternância de unidade PM / horas
-
-### Por Projeto
-- Gráfico donut de distribuição de horas por projeto
-- Matriz pessoa × projeto com totais
-- Catálogo de projetos: adicionar, remover e ativar/desativar
-
-### Equipa
-- Adicionar e remover membros
-- Edição de capacidade mensal por pessoa (default: 140 h)
-
-### Arquivo
-- Submissão de snapshot mensal do plano (após revisão dos chefes de equipa)
-- Histórico de planos com data, autor, nota e estatísticas
-- Consulta detalhada de cada plano
-- Restauro de estado a partir de um plano arquivado
+| Vista | O que faz |
+|---|---|
+| **Dashboard** | Utilização média, pessoas em risco, próximo mês, sobrealocações |
+| **Alocações** | Tabela CRUD — pessoa, projeto, WP, tarefa, datas, horas |
+| **Heatmap** | Mapa de calor utilização × mês (5 níveis de cor) |
+| **Timeline** | Gantt arrastável e redimensionável por pessoa |
+| **Por Projeto** | Resumo de horas e PM por projeto e mês |
+| **Equipa** | Edição de capacidades mensais por pessoa |
+| **Arquivo** | Snapshots mensais do plano para consulta histórica |
 
 ---
 
-## Colaboração e sessões
+## Arquitectura
 
-- **Modo de leitura** — sem sessão ativa, a aplicação é somente de leitura; um banner amarelo indica o estado e oferece acesso direto ao check-in
-- **Check-in / check-out** — cada utilizador inicia uma sessão com as suas iniciais (até 4 caracteres); todas as alterações ficam registadas com autoria e timestamp
-- **Bloqueio de edições** — qualquer tentativa de escrita sem sessão (criar/editar/eliminar alocações, arrastar no Gantt, editar capacidades, importar dados, etc.) é bloqueada e abre automaticamente o diálogo de check-in
-- **Diário de alterações** — visível no menu Dados, mostra as modificações desde a última sessão do utilizador atual
-- **Mesclar inteligente (3-way diff)** — ao importar um ficheiro JSON, o sistema deteta automaticamente registos novos, alterados, em conflito (vence o mais recente) e eliminados
+```
+index.html  (aplicação completa — HTML + CSS + JS num único ficheiro)
+data/
+  state.json  (base de dados da aplicação — lida/escrita via GitLab API)
+.gitlab-ci.yml  (deploy automático para GitLab Pages)
+```
 
----
-
-## Importação / Exportação
-
-| Formato | Importar | Exportar |
-|---------|----------|----------|
-| JSON | Substituir tudo, mesclar simples ou mesclar inteligente | Backup completo com baseline de sincronização |
-| Excel | Formato Assignment (sheet original) | Folha de output + matriz de percentagem de alocação |
-
----
-
-## Stack técnica
+### Stack
 
 | Componente | Tecnologia |
-|------------|------------|
-| Frontend | HTML + CSS + JavaScript (vanilla) |
-| Persistência | [Supabase](https://supabase.com) (PostgreSQL) |
-| Excel | [SheetJS / xlsx](https://sheetjs.com) |
-| Tipografia | Fraunces · Inter Tight · JetBrains Mono (Google Fonts) |
-| Deploy | GitHub Pages |
+|---|---|
+| Frontend | HTML / CSS / JavaScript vanilla |
+| Persistência | GitLab Repository Files API (`data/state.json`) |
+| Autenticação | GitLab OAuth 2.0 com PKCE |
+| Hosting | GitLab Pages (`gitpages.inegi.up.pt`) |
+| CI/CD | GitLab Runner (shell, Windows) |
+
+Não existe servidor de aplicação. O `index.html` é um ficheiro estático; os dados são
+lidos e escritos directamente no repositório através da GitLab API, usando um
+*project access token* para leitura/escrita e OAuth para identificar o utilizador.
 
 ---
 
-## Configuração do Supabase
+## Como usar
 
-A aplicação requer as seguintes tabelas no Supabase:
+### Primeira visita
+1. Abre https://gitpages.inegi.up.pt/planeamento-d9a840/
+2. Clica **Entrar** — redireciona para o login do GitLab (`git.inegi.up.pt`)
+3. Autentica com as credenciais da empresa
+4. A página abre com sessão iniciada no teu nome
 
-```sql
--- Membros da equipa
-create table workers (
-  app_id text not null,
-  name   text not null,
-  primary key (app_id, name)
-);
+Nas visitas seguintes o login é automático (token guardado no browser).
 
--- Catálogo de projetos
-create table projects (
-  app_id text    not null,
-  name   text    not null,
-  active boolean default true,
-  primary key (app_id, name)
-);
+### Editar dados
+- Qualquer alteração (nova alocação, edição, eliminação) requer sessão activa
+- Clica **Sair** para terminar a sessão e registar o checkout no histórico
+- O diário de alterações (**Changelog**) mostra o que mudou desde a tua última sessão
 
--- Registos de alocação
-create table records (
-  id           text primary key,
-  app_id       text,
-  team         text,
-  worker       text,
-  project      text,
-  wp           text,
-  task         text,
-  start_date   text,
-  end_date     text,
-  total_hours  numeric default 0,
-  months_hours jsonb   default '{}',
-  updated_at   timestamptz
-);
-
--- Capacidade mensal por pessoa
-create table capacity (
-  app_id text    not null,
-  worker text    not null,
-  ym     text    not null,  -- formato YYYY-MM
-  hours  numeric default 140,
-  primary key (app_id, worker, ym)
-);
-
--- Configuração geral e arquivo de planos
-create table app_config (
-  app_id text not null,
-  key    text not null,
-  value  text,
-  primary key (app_id, key)
-);
-
--- Sessões de edição
-create table sessions (
-  id             uuid primary key default gen_random_uuid(),
-  app_id         text,
-  user_initials  text,
-  checked_in_at  timestamptz default now(),
-  checked_out_at timestamptz,
-  is_active      boolean default true
-);
-
--- Diário de alterações
-create table changelog (
-  id            uuid primary key default gen_random_uuid(),
-  app_id        text,
-  session_id    uuid,
-  user_initials text,
-  action        text,   -- create | update | delete
-  entity_type   text,
-  entity_id     text,
-  entity_name   text,
-  summary       text,
-  changed_at    timestamptz default now()
-);
-```
-
-Configurar as políticas de Row Level Security (RLS) conforme necessário. Para uso interno sem autenticação, pode-se permitir acesso anónimo com a anon key.
+### Importar / Exportar
+- **Dados → Importar Excel** — carrega um ficheiro `.xlsx` com a estrutura esperada
+- **Dados → Exportar JSON / Excel** — exporta o estado actual
+- **Submeter Plano** — guarda um snapshot do mês no Arquivo
 
 ---
 
-## Configuração da aplicação
-
-No ficheiro `index.html`, substituir as constantes no topo do bloco `<script>`:
-
-```js
-const SUPABASE_URL      = 'https://SEU-PROJETO.supabase.co';
-const SUPABASE_ANON_KEY = 'SUA-ANON-KEY';
-const APP_ID            = 'team-planning'; // identificador da instância
-```
-
-O `APP_ID` permite usar o mesmo projeto Supabase para múltiplas instâncias da aplicação.
-
----
-
-## Deploy
-
-A aplicação é um ficheiro estático — basta servir `index.html` a partir de qualquer host estático.
-
-**GitHub Pages** (configuração atual):  
-Ativar em *Settings → Pages → Source: Deploy from branch → main*.  
-URL: `https://<utilizador>.github.io/<repositório>/`
-
----
-
-## Estrutura de dados
-
-Cada registo de alocação contém:
+## Estrutura do `data/state.json`
 
 ```json
 {
-  "id": "rec_1234567890_abc123",
-  "worker": "Maria Silva",
-  "project": "POCTEP-SMARTFLOW",
-  "wp": "WP3",
-  "task": "Modelação hidrológica",
-  "start": "2026-01",
-  "end": "2026-06",
-  "totalHours": 280,
-  "monthsHours": {
-    "2026-01": 40,
-    "2026-02": 50,
-    "2026-03": 60,
-    "2026-04": 50,
-    "2026-05": 40,
-    "2026-06": 40
-  }
+  "workers":   ["Nome Apelido", ...],
+  "projects":  [{ "name": "...", "active": true }, ...],
+  "records":   [{ "id": "rec_...", "worker": "...", "project": "...",
+                  "start": "YYYY-MM", "end": "YYYY-MM",
+                  "totalHours": 0, "monthsHours": {"YYYY-MM": 0} }],
+  "capacity":  { "Nome Apelido": { "YYYY-MM": 140 } },
+  "config":    { "editorInitials": "...", "plan_snapshots": [...] },
+  "changelog": [{ "user_initials": "jsilva", "action": "update", ... }],
+  "sessions":  [{ "user_initials": "jsilva", "checked_in_at": "...", ... }]
 }
 ```
+
+---
+
+## CI/CD — Deploy automático
+
+O ficheiro `.gitlab-ci.yml` configura um pipeline com um único job (`pages`) que:
+1. Copia `index.html` para `public/`
+2. Faz upload do artefacto para o GitLab Pages
+
+O deploy corre automaticamente em cada push para `main`.
+
+### Runner
+
+O runner é um **shell executor Windows** a correr na máquina `jsilva@inegi.up.pt`.
+Inicia automaticamente ao login via `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\gitlab-runner.vbs`.
+
+Se o runner não estiver activo (ex: após reinício sem login):
+```powershell
+Start-Process -FilePath "C:\gitlab-runner\gitlab-runner.exe" `
+  -ArgumentList "run --config `"C:\gitlab-runner\config.toml`"" `
+  -WindowStyle Hidden
+```
+
+---
+
+## Autenticação OAuth
+
+A aplicação usa **GitLab OAuth 2.0 com PKCE** (sem segredo de cliente, adequado para SPAs).
+
+| Parâmetro | Valor |
+|---|---|
+| Provider | `git.inegi.up.pt` |
+| Application ID | `33a3f19adc5d27b42cafb6c3369766acc8c9d6602820a9f85af429781226767e` |
+| Redirect URI | `https://gitpages.inegi.up.pt/planeamento-d9a840/` |
+| Scope | `read_user` |
+
+O token OAuth é guardado no `localStorage` do browser e refrescado automaticamente.
+A identidade do utilizador (username GitLab) é verificada via `/api/v4/user` —
+não pode ser forjada.
+
+---
+
+## Acesso à API GitLab
+
+A leitura e escrita do `data/state.json` usa um **Project Access Token** com scope `api`,
+hardcoded no `index.html` (equivalente à *anon key* do Supabase — visível no source,
+mas com acesso limitado a este projecto).
+
+Para regenerar o token: **Settings → Access Tokens → app-token**.
+
+---
+
+## Desenvolvimento local
+
+```bash
+# Clonar
+git clone https://git.inegi.up.pt/umec/manufacturing_processes/planeamento.git
+cd planeamento
+
+# Abrir directamente no browser (OAuth não funciona em file://)
+# Usar um servidor local, ex:
+python -m http.server 8080
+# e aceder a http://localhost:8080
+```
+
+> **Nota:** Para o OAuth funcionar em desenvolvimento é necessário adicionar
+> `http://localhost:8080/` como Redirect URI na OAuth Application
+> (`git.inegi.up.pt` → Preferences → Applications → editar a app).
+
+---
+
+## Projecto GitLab
+
+- **Repositório:** https://git.inegi.up.pt/umec/manufacturing_processes/planeamento
+- **Project ID:** 192
+- **Namespace:** `umec/manufacturing_processes`
