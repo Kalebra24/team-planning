@@ -1212,6 +1212,118 @@
     .form-grid { grid-template-columns: 1fr 1fr; }
     .project-chart { grid-template-columns: 1fr; }
   }
+
+  /* ──────── HELP MODAL ──────── */
+  .help-body {
+    display: grid;
+    grid-template-columns: 176px 1fr;
+    height: calc(90vh - 56px);
+    overflow: hidden;
+  }
+  .help-nav {
+    border-right: 1px solid var(--line);
+    padding: 14px 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .help-nav a {
+    display: block;
+    padding: 5px 9px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-radius: 5px;
+    line-height: 1.35;
+    cursor: pointer;
+  }
+  .help-nav a:hover { background: var(--neutral-bg); color: var(--ink); }
+  .help-nav a.hn-active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .help-nav .hn-sep { height: 1px; background: var(--line-soft); margin: 6px 0; }
+  .help-content {
+    padding: 28px 32px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .help-content h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--ink);
+    margin: 36px 0 10px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+    scroll-margin-top: 20px;
+  }
+  .help-content h2:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+  .help-content h3 { font-size: 13px; font-weight: 600; color: var(--ink); margin: 18px 0 6px; }
+  .help-content p { margin-bottom: 10px; }
+  .help-content ul, .help-content ol { margin: 6px 0 10px 18px; }
+  .help-content li { margin-bottom: 3px; }
+  .help-content code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--neutral-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+  .help-content blockquote {
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-left: 3px solid var(--line);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+  }
+  .help-content table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; }
+  .help-content table th {
+    text-align: left;
+    padding: 5px 10px;
+    background: var(--bg);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--line);
+  }
+  .help-content table td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  .help-content table tr:last-child td { border-bottom: none; }
+  .help-content .tip {
+    background: var(--ok-bg);
+    border: 1px solid #b8ccaa;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--ok);
+    margin: 10px 0;
+  }
+  .help-content .warn-note {
+    background: var(--warn-bg);
+    border: 1px solid #d9c077;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #6b5200;
+    margin: 10px 0;
+  }
+  .btn-help {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-help:hover { border-color: var(--ink-soft); color: var(--ink); }
 </style>
 </head>
 <body>
@@ -1276,6 +1388,7 @@
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
       <input type="file" id="file-input-json" accept=".json,application/json" style="display:none">
+      <button class="btn-help" id="btn-help" title="Ajuda / Guia de utilização">?</button>
       <button class="btn btn-sm btn-accent" id="btn-submit-plan">↑ Submeter Plano</button>
       <button class="btn btn-sm btn-primary" id="btn-new">+ Nova Alocação</button>
     </div>
@@ -1742,6 +1855,187 @@
         Cancelar (reverter)
       </button>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: AJUDA ═══════════ -->
+<div class="modal-bg" id="modal-help">
+  <div class="modal" style="max-width:900px; width:96vw; max-height:90vh; padding:0; overflow:hidden; display:flex; flex-direction:column">
+    <div class="modal-head" style="padding:14px 20px; flex-shrink:0">
+      <div class="modal-title">Guia de Utilização</div>
+      <button class="close-btn" id="modal-help-close">×</button>
+    </div>
+    <div class="help-body">
+      <!-- Navegação lateral -->
+      <nav class="help-nav" id="help-nav">
+        <a onclick="helpGo('h-acesso')">1. Acesso e Sessão</a>
+        <a onclick="helpGo('h-cabecalho')">2. Cabeçalho</a>
+        <a onclick="helpGo('h-dashboard')">3. Dashboard</a>
+        <a onclick="helpGo('h-alocacoes')">4. Alocações</a>
+        <a onclick="helpGo('h-heatmap')">5. Heatmap</a>
+        <a onclick="helpGo('h-timeline')">6. Timeline</a>
+        <a onclick="helpGo('h-projetos')">7. Por Projeto</a>
+        <a onclick="helpGo('h-equipa')">8. Equipa</a>
+        <a onclick="helpGo('h-arquivo')">9. Arquivo</a>
+        <a onclick="helpGo('h-dados')">10. Dados</a>
+        <div class="hn-sep"></div>
+        <a onclick="helpGo('h-faq')">FAQ</a>
+      </nav>
+
+      <!-- Conteúdo -->
+      <div class="help-content" id="help-content">
+
+        <h2 id="h-acesso">1. Acesso e Sessão</h2>
+        <p>A aplicação abre em modo de <strong>leitura</strong> — podes consultar tudo sem fazer login. Para editar qualquer dado é necessário ter sessão activa.</p>
+        <h3>Iniciar sessão</h3>
+        <ol>
+          <li>Clica <strong>Entrar</strong> (canto superior direito)</li>
+          <li>Serás redireccionado para o login do GitLab (<code>git.inegi.up.pt</code>)</li>
+          <li>Autentica com as tuas credenciais da empresa</li>
+          <li>Volta à aplicação com sessão iniciada no teu nome</li>
+        </ol>
+        <div class="tip">Na próxima visita o login é automático — o token fica guardado no browser.</div>
+        <h3>Terminar sessão</h3>
+        <p>Clica <strong>Sair</strong> no canto superior direito. O checkout fica registado no diário de alterações.</p>
+        <h3>Modo de leitura</h3>
+        <p>Enquanto não tiveres sessão activa aparece uma barra amarela: <em>🔒 Modo de leitura — inicia sessão para fazer alterações.</em> Qualquer tentativa de edição redireccionará para o login.</p>
+
+        <h2 id="h-cabecalho">2. Cabeçalho e Navegação</h2>
+        <table>
+          <thead><tr><th>Elemento</th><th>Função</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Entrar / Sair</strong></td><td>Login com conta GitLab / terminar sessão</td></tr>
+            <tr><td><strong>Dados ▾</strong></td><td>Menu de importação, exportação e diário de alterações</td></tr>
+            <tr><td><strong>↑ Submeter Plano</strong></td><td>Guardar snapshot do estado actual no Arquivo</td></tr>
+            <tr><td><strong>+ Nova Alocação</strong></td><td>Criar um novo registo de alocação</td></tr>
+            <tr><td><strong>Tabs</strong></td><td>Navegar entre as diferentes vistas</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="h-dashboard">3. Dashboard</h2>
+        <p>Vista de resumo executivo do estado actual do planeamento.</p>
+        <h3>Indicadores de topo</h3>
+        <table>
+          <thead><tr><th>Cartão</th><th>Significado</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Utilização média</strong></td><td>% média de utilização da equipa no mês actual</td></tr>
+            <tr><td><strong>Em risco</strong></td><td>Pessoas sem alocação nos próximos 3 meses</td></tr>
+            <tr><td><strong>Sobrealocações &gt;110%</strong></td><td>Pessoas e meses com carga superior a 110% da capacidade</td></tr>
+          </tbody>
+        </table>
+        <h3>Painel — Próximo mês</h3>
+        <table>
+          <thead><tr><th>Cor</th><th>Intervalo</th><th>Significado</th></tr></thead>
+          <tbody>
+            <tr><td>🟢 Verde</td><td>≤ 95%</td><td>Bem alocado</td></tr>
+            <tr><td>🟡 Âmbar</td><td>96–110%</td><td>Atenção</td></tr>
+            <tr><td>🔴 Vermelho</td><td>&gt; 110%</td><td>Sobrealocado</td></tr>
+            <tr><td>⬜ Cinzento</td><td>0%</td><td>Sem alocação</td></tr>
+          </tbody>
+        </table>
+        <h3>Capacidade vs Alocação</h3>
+        <p>Gráfico de barras por pessoa. Selecciona <strong>ano</strong> e <strong>mês</strong> (ou "Média anual") nos selectores do cartão.</p>
+
+        <h2 id="h-alocacoes">4. Alocações</h2>
+        <p>Tabela principal com todos os registos. Filtra por pessoa, projecto ou texto livre.</p>
+        <h3>Criar uma alocação</h3>
+        <ol>
+          <li>Clica <strong>+ Nova Alocação</strong></li>
+          <li>Preenche os campos obrigatórios: Pessoa, Projecto, Início, Fim, Horas totais</li>
+          <li>Opcionalmente: WP, Atividade, distribuição mês-a-mês personalizada</li>
+          <li>Clica <strong>Guardar</strong></li>
+        </ol>
+        <div class="tip">Para distribuir horas de forma desigual pelos meses, usa a secção <em>Distribuição mês a mês</em> no formulário.</div>
+        <h3>Editar / Eliminar</h3>
+        <p>Usa os ícones ✏️ e 🗑️ em cada linha da tabela.</p>
+        <h3>Limpar todas as alocações</h3>
+        <p>Botão <strong>Limpar Tudo</strong> (vermelho). Remove todos os registos mas mantém pessoas, projectos e capacidades.</p>
+
+        <h2 id="h-heatmap">5. Heatmap</h2>
+        <p>Mapa de calor de utilização — <strong>pessoa × mês</strong>.</p>
+        <table>
+          <thead><tr><th>Cor</th><th>Intervalo</th><th>Significado</th></tr></thead>
+          <tbody>
+            <tr><td>⬜ Neutro</td><td>0–25%</td><td>Subutilizado</td></tr>
+            <tr><td>🟢 Verde claro</td><td>26–75%</td><td>Normal</td></tr>
+            <tr><td>🟢 Verde escuro</td><td>76–95%</td><td>Bem alocado</td></tr>
+            <tr><td>🟡 Âmbar</td><td>96–110%</td><td>Quase no limite</td></tr>
+            <tr><td>🔴 Vermelho</td><td>&gt; 110%</td><td>Sobrealocado</td></tr>
+          </tbody>
+        </table>
+        <p>Define o período com os campos <strong>De / Até</strong> ou usa os atalhos rápidos. Clica numa célula para ver o detalhe de alocações daquela pessoa naquele mês.</p>
+
+        <h2 id="h-timeline">6. Timeline (Gantt)</h2>
+        <p>Vista de Gantt das alocações por pessoa. Filtra por pessoas e/ou projectos.</p>
+        <h3>Interações</h3>
+        <table>
+          <thead><tr><th>Gesto</th><th>Resultado</th></tr></thead>
+          <tbody>
+            <tr><td>Arrastar barra</td><td>Move as datas de início e fim</td></tr>
+            <tr><td>Arrastar pega direita</td><td>Altera o mês de fim</td></tr>
+            <tr><td>Clicar na barra</td><td>Abre o formulário de edição</td></tr>
+          </tbody>
+        </table>
+        <div class="tip">Ao largar após drag, uma caixa pergunta se queres redistribuir as horas automaticamente ou editar mês a mês.</div>
+        <h3>Mostrar mensais</h3>
+        <p>Activa o toggle <strong>Mostrar mensais</strong> para ver e editar o valor de cada mês directamente na barra do Gantt.</p>
+        <h3>Unidade</h3>
+        <p>Alterna entre <strong>PM</strong> (Person-Month) e <strong>Horas</strong> absolutas.</p>
+
+        <h2 id="h-projetos">7. Por Projeto</h2>
+        <p>Distribuição de horas e pessoas por projecto no ano seleccionado.</p>
+        <ul>
+          <li><strong>Donut chart</strong> — proporção de horas por projecto</li>
+          <li><strong>Matriz pessoa × projecto</strong> — horas cruzadas</li>
+          <li><strong>Catálogo de projectos</strong> — adicionar, activar/desactivar, eliminar projectos</li>
+        </ul>
+        <p>Clica no nome de um projecto para o activar/desactivar. Projectos inactivos não aparecem nos dropdowns de nova alocação.</p>
+
+        <h2 id="h-equipa">8. Equipa</h2>
+        <h3>Membros</h3>
+        <p>Adiciona pessoas com nome e capacidade mensal por omissão (padrão: 140h). Remove com o ícone 🗑️ (só se não tiver alocações).</p>
+        <h3>Capacidade mensal</h3>
+        <p>Tabela editável com horas disponíveis por pessoa × mês. Selecciona o ano e clica directamente nas células para editar. Célula vazia = 140h. Guarda ao sair da célula.</p>
+        <div class="tip">As capacidades são usadas para calcular as percentagens de utilização em todo o planeamento.</div>
+
+        <h2 id="h-arquivo">9. Arquivo</h2>
+        <p>Histórico de snapshots mensais do plano — útil após cada revisão de chefes de equipa.</p>
+        <h3>Submeter um plano</h3>
+        <ol>
+          <li>Clica <strong>↑ Submeter Plano</strong> quando o plano do mês estiver finalizado</li>
+          <li>Selecciona o mês do plano e adiciona uma nota opcional</li>
+          <li>Clica <strong>Guardar no arquivo</strong></li>
+        </ol>
+        <h3>Consultar / Restaurar / Eliminar</h3>
+        <p>Clica <strong>Ver</strong> numa linha do arquivo para abrir o snapshot. A partir daí podes <strong>Restaurar estado</strong> (substitui os dados actuais) ou <strong>Eliminar do arquivo</strong>.</p>
+        <div class="warn-note">⚠️ Restaurar substitui permanentemente os dados actuais. Faz um backup (Dados → Descarregar JSON) antes se necessário.</div>
+
+        <h2 id="h-dados">10. Dados — Importar e Exportar</h2>
+        <p>Acessível pelo menu <strong>Dados ▾</strong> no cabeçalho.</p>
+        <table>
+          <thead><tr><th>Opção</th><th>Uso</th></tr></thead>
+          <tbody>
+            <tr><td><strong>↓ Descarregar JSON</strong></td><td>Backup completo do estado actual</td></tr>
+            <tr><td><strong>↑ Carregar JSON</strong></td><td>Repõe ou mescla dados a partir de ficheiro</td></tr>
+            <tr><td><strong>↑ Importar Excel</strong></td><td>Carrega o ficheiro .xlsx de planeamento original</td></tr>
+            <tr><td><strong>↓ Exportar Excel</strong></td><td>Gera .xlsx com todas as alocações actuais</td></tr>
+            <tr><td><strong>⧗ Diário de alterações</strong></td><td>Histórico de todas as modificações com autor e data</td></tr>
+          </tbody>
+        </table>
+        <div class="tip">Ao iniciar sessão, o diário mostra automaticamente o que mudou desde a tua última visita.</div>
+
+        <h2 id="h-faq">Perguntas Frequentes</h2>
+        <h3>As alterações são guardadas automaticamente?</h3>
+        <p>Sim. Cada operação guarda imediatamente no servidor. Não há botão "Guardar".</p>
+        <h3>Posso usar em simultâneo com colegas?</h3>
+        <p>Sim, mas evita editar o mesmo registo ao mesmo tempo. A última gravação prevalece.</p>
+        <h3>Fechei o browser sem fazer Sair. E agora?</h3>
+        <p>Os dados ficam guardados. A sessão fica activa até fazeres Sair explicitamente ou o token expirar (~2h).</p>
+        <h3>Fiz algo errado. Como reverter?</h3>
+        <p>Usa o <strong>Arquivo</strong> se tinhas um snapshot recente, ou <strong>Dados → Carregar JSON</strong> se tens um backup manual.</p>
+
+      </div><!-- /.help-content -->
+    </div><!-- /.help-body -->
   </div>
 </div>
 
@@ -5049,6 +5343,45 @@ function toast(msg, kind='ok') {
   t.className = 'toast show ' + (kind === 'error' ? 'error' : '');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// HELP MODAL
+// ════════════════════════════════════════════════════════════════════════
+function helpGo(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // highlight active nav link
+    document.querySelectorAll('.help-nav a').forEach(a => a.classList.remove('hn-active'));
+    const active = [...document.querySelectorAll('.help-nav a')]
+      .find(a => a.getAttribute('onclick')?.includes(id));
+    if (active) active.classList.add('hn-active');
+  }
+}
+
+(function wireHelp() {
+  const modal   = document.getElementById('modal-help');
+  const content = document.getElementById('help-content');
+
+  document.getElementById('btn-help').onclick = () => modal.classList.add('active');
+  document.getElementById('modal-help-close').onclick = () => modal.classList.remove('active');
+  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('active'); });
+
+  // Highlight nav on scroll
+  if (content) {
+    content.addEventListener('scroll', () => {
+      const headers = content.querySelectorAll('h2[id]');
+      let current = null;
+      headers.forEach(h => {
+        if (h.offsetTop - content.scrollTop <= 40) current = h.id;
+      });
+      document.querySelectorAll('.help-nav a').forEach(a => {
+        const match = a.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+        a.classList.toggle('hn-active', match === current);
+      });
+    });
+  }
+})();
 
 // ════════════════════════════════════════════════════════════════════════
 // CHANGELOG MODAL WIRING
