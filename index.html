@@ -1745,32 +1745,6 @@
   </div>
 </div>
 
-<!-- ═══════════ MODAL: GITLAB TOKEN ═══════════ -->
-<div class="modal-bg" id="modal-gitlab-config">
-  <div class="modal" style="max-width:480px">
-    <div class="modal-head">
-      <div class="modal-title">Token de acesso GitLab</div>
-    </div>
-    <p style="margin-bottom:8px; font-size:13px; color:var(--ink-soft)">
-      Para carregar e guardar dados precisas de um <strong>Personal Access Token</strong> com scope <strong>api</strong>.
-    </p>
-    <p style="margin-bottom:16px; font-size:12px; color:var(--ink-faint)">
-      Em <code style="font-family:'JetBrains Mono',monospace; background:var(--bg); padding:1px 5px; border-radius:3px">git.inegi.up.pt → Preferências → Access Tokens → Add new token</code>. O token fica guardado apenas neste browser.
-    </p>
-    <form id="form-gitlab-config">
-      <div class="field">
-        <label for="f-gl-token">Personal Access Token</label>
-        <input type="password" id="f-gl-token" required autofocus placeholder="glpat-…" style="font-family:'JetBrains Mono',monospace; font-size:14px; letter-spacing:0.04em">
-      </div>
-      <p id="gl-config-error" style="display:none; margin-top:12px; font-size:12px; color:var(--danger); background:var(--danger-bg); padding:8px 10px; border-radius:5px"></p>
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line-soft)">
-        <button type="button" class="btn" id="gl-config-cancel">Cancelar</button>
-        <button type="submit" class="btn btn-primary" id="gl-config-save">Ligar</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <!-- ═══════════ MODAL: NOVA/EDIT ALOCAÇÃO ═══════════ -->
 <div class="modal-bg" id="modal">
   <div class="modal">
@@ -1882,7 +1856,6 @@ async function logChange(action, entityType, entityId, entityName, summary) {
 }
 
 async function checkIn() {
-  if (!GL.isConfigured()) { openGitLabConfig(); return; }
   const initials = await askInitials('check-in');
   if (!initials) return;
 
@@ -1998,24 +1971,20 @@ function updateCheckinUI() {
 // ════════════════════════════════════════════════════════════════════════
 // PERSISTENCE — GitLab Repository Files API
 // ════════════════════════════════════════════════════════════════════════
-// Hardcoded GitLab instance — only the user's Personal Access Token
-// (scope: api) is stored in localStorage under the key 'gl_token'.
-// Dados guardados em:  data/state.json  (ramo: main)
+// GitLab instance + project token hardcoded — dados em data/state.json (ramo: main)
 
 const GL = {
   baseUrl:   'https://git.inegi.up.pt',
   projectId: '192',
-  get token() { return localStorage.getItem('gl_token') || ''; },
-  dataPath: 'data%2Fstate.json',
-  branch:   'main',
+  token:     'glpat-9qIsKvWVsjGwBAX_cJXin286MQp1OjFrCA.01.0y05ticxa',
+  dataPath:  'data%2Fstate.json',
+  branch:    'main',
 
   headers() {
     return { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': this.token };
   },
 
-  isConfigured() {
-    return !!this.token;
-  },
+  isConfigured() { return true; },
 
   async readFile() {
     const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}/raw?ref=${this.branch}&ts=${Date.now()}`;
@@ -4984,55 +4953,9 @@ document.getElementById('modal-changelog').addEventListener('click', e => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
-// GITLAB CONFIG MODAL
-// ════════════════════════════════════════════════════════════════════════
-function openGitLabConfig(onSuccess) {
-  document.getElementById('f-gl-token').value = localStorage.getItem('gl_token') || '';
-  const errEl = document.getElementById('gl-config-error');
-  errEl.style.display = 'none';
-  document.getElementById('modal-gitlab-config').classList.add('active');
-  setTimeout(() => document.getElementById('f-gl-token').focus(), 50);
-
-  document.getElementById('form-gitlab-config').onsubmit = async (e) => {
-    e.preventDefault();
-    const token = document.getElementById('f-gl-token').value.trim();
-    const btn   = document.getElementById('gl-config-save');
-
-    btn.disabled = true;
-    btn.textContent = 'A verificar…';
-    errEl.style.display = 'none';
-
-    // Validate token by reading project metadata
-    try {
-      const res = await fetch(
-        `${GL.baseUrl}/api/v4/projects/${encodeURIComponent(GL.projectId)}`,
-        { headers: { 'PRIVATE-TOKEN': token } }
-      );
-      if (!res.ok) throw new Error(`${res.status} — token inválido ou sem acesso ao projeto`);
-    } catch (err) {
-      errEl.textContent = String(err.message || 'Erro de ligação ao GitLab');
-      errEl.style.display = '';
-      btn.disabled = false;
-      btn.textContent = 'Ligar';
-      return;
-    }
-
-    localStorage.setItem('gl_token', token);
-    document.getElementById('modal-gitlab-config').classList.remove('active');
-    btn.disabled = false;
-    btn.textContent = 'Ligar';
-    toast('Token configurado ✓');
-    if (typeof onSuccess === 'function') onSuccess();
-  };
-
-  document.getElementById('gl-config-cancel').onclick = () =>
-    document.getElementById('modal-gitlab-config').classList.remove('active');
-}
-
-// ════════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════════
-async function bootApp() {
+(async function init() {
   const had = await loadState();
   if (!had) {
     await seedFromExcel();
@@ -5040,16 +4963,6 @@ async function bootApp() {
   }
   updateCheckinUI();
   renderDashboard();
-}
-
-(async function init() {
-  if (!GL.isConfigured()) {
-    updateCheckinUI();
-    renderDashboard();
-    openGitLabConfig(() => bootApp());
-    return;
-  }
-  await bootApp();
 })();
 </script>
 </body>
