@@ -1447,6 +1447,13 @@
             </button>
           </div>
           <div class="dm-section">
+            <div class="dm-label">Ausências e Férias</div>
+            <button type="button" class="dm-item" id="btn-import-ferias">
+              <span>📅 Importar Mapa de Férias</span>
+              <span class="dm-hint">SIGEI · férias por pessoa/mês → ausências</span>
+            </button>
+          </div>
+          <div class="dm-section">
             <div class="dm-label">Arquivo Mensal</div>
             <button type="button" class="dm-item" id="btn-menu-submit-plan">
               <span>↑ Submeter plano do mês</span>
@@ -1475,6 +1482,7 @@
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
       <input type="file" id="file-input-json" accept=".json,application/json" style="display:none">
+      <input type="file" id="file-input-ferias" accept=".html,.htm" style="display:none">
       <span id="sync-indicator" title="Estado de sincronização"></span>
       <button class="btn btn-sm" id="btn-undo" title="Desfazer última ação (Ctrl+Z)" onclick="undoLast()">↩ Desfazer</button>
       <button class="btn-help" id="btn-help" title="Ajuda / Guia de utilização">?</button>
@@ -2190,6 +2198,34 @@
 
       </div><!-- /.help-content -->
     </div><!-- /.help-body -->
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: MAPA DE FÉRIAS ═══════════ -->
+<div class="modal-bg" id="modal-mapa-ferias">
+  <div class="modal" style="max-width:700px; max-height:88vh; overflow:hidden; display:flex; flex-direction:column">
+    <div class="modal-head">
+      <div class="modal-title">📅 Importar Mapa de Férias SIGEI</div>
+      <button class="close-btn" id="modal-mapa-ferias-close">×</button>
+    </div>
+    <div style="display:flex; gap:16px; margin-bottom:14px; align-items:flex-end; flex-wrap:wrap">
+      <div class="field" style="margin:0">
+        <label>Ano base do mapa</label>
+        <input type="number" id="mf-year" value="" min="2020" max="2040" style="width:90px">
+      </div>
+      <div class="field" style="margin:0">
+        <label>Horas por dia útil</label>
+        <input type="number" id="mf-hours" value="7" min="1" max="24" step="0.5" style="width:80px">
+      </div>
+      <div style="font-size:12px; color:var(--ink-faint); line-height:1.4; flex:1; min-width:180px">
+        Modalidade <strong>adicionar/actualizar</strong> — não remove ausências existentes de outros meses.
+      </div>
+    </div>
+    <div id="mf-preview" style="flex:1; overflow-y:auto; min-height:100px"></div>
+    <div style="display:flex; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line-soft)">
+      <button class="btn" id="mf-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="mf-confirm" disabled>Registar ausências</button>
+    </div>
   </div>
 </div>
 
@@ -5918,6 +5954,264 @@ document.getElementById('btn-export').onclick = async () => {
 
   XLSX.writeFile(wb, `planeamento_processos_${fileTimestamp()}_${initials}.xlsx`);
   toast(`Excel exportado (${initials})`);
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// IMPORTAR MAPA DE FÉRIAS (SIGEI)
+// ════════════════════════════════════════════════════════════════════════
+let _mapaFeriasEntries = null; // [{name, m, nextYear, days}]
+
+function _mfGetMonthNum(text) {
+  const t = (text || '').toLowerCase().trim();
+  if (t.startsWith('jan')) return 1;
+  if (t.startsWith('fev')) return 2;
+  if (t.startsWith('mar')) return 3;
+  if (t.startsWith('abr')) return 4;
+  if (t.startsWith('mai')) return 5;
+  if (t.startsWith('jun')) return 6;
+  if (t.startsWith('jul')) return 7;
+  if (t.startsWith('ago')) return 8;
+  if (t.startsWith('set')) return 9;
+  if (t.startsWith('out')) return 10;
+  if (t.startsWith('nov')) return 11;
+  if (t.startsWith('dez')) return 12;
+  return 0;
+}
+
+function _mfNormName(n) {
+  return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function _mfMatchWorker(parsedName) {
+  const norm = _mfNormName(parsedName);
+  // 1. Exact normalized match
+  let w = state.workers.find(x => _mfNormName(x) === norm);
+  if (w) return w;
+  // 2. Partial match (one is a substring of the other)
+  w = state.workers.find(x => {
+    const wn = _mfNormName(x);
+    return wn.length > 3 && (norm.includes(wn) || wn.includes(norm));
+  });
+  return w || null;
+}
+
+function _parseMapaFeriasHTML(htmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText, 'text/html');
+
+  // Identify data tables: first direct cell text === 'Nome'
+  const allTables = [...doc.querySelectorAll('table')];
+  const dataTables = allTables.filter(t => {
+    const firstCell =
+      t.querySelector(':scope > tbody > tr:first-child > td:first-child') ||
+      t.querySelector(':scope > tr:first-child > td:first-child');
+    return firstCell && firstCell.textContent.trim() === 'Nome';
+  });
+
+  if (dataTables.length === 0) return null;
+
+  const entries = []; // {name, m, nextYear, days}
+
+  dataTables.forEach((table, tableIdx) => {
+    // Extract month sequence from first header row
+    const headerRow =
+      table.querySelector(':scope > tbody > tr:first-child') ||
+      table.querySelector(':scope > tr:first-child');
+    if (!headerRow) return;
+    const headerCells = [...headerRow.querySelectorAll(':scope > td')];
+
+    const monthSeq = []; // {m, nextYear}
+    let lastM = 0;
+    for (let i = 2; i < headerCells.length; i++) {
+      const m = _mfGetMonthNum(headerCells[i].textContent);
+      if (!m) continue;
+      // Detect year wrap: Jan appearing after Jul-Dec in table 2
+      const nextYear = tableIdx === 1 && m <= lastM;
+      lastM = m;
+      monthSeq.push({ m, nextYear });
+    }
+
+    // Get all direct tbody rows
+    const allRows = [
+      ...(table.querySelectorAll(':scope > tbody > tr').length
+        ? table.querySelectorAll(':scope > tbody > tr')
+        : table.querySelectorAll(':scope > tr'))
+    ];
+
+    // Process rows from index 2 (skip the two header rows)
+    for (let ri = 2; ri < allRows.length; ri++) {
+      const row = allRows[ri];
+      const cells = [...row.querySelectorAll(':scope > td')];
+      if (cells.length < 3) continue;
+
+      // Person row detection: first cell has a <span> child with text
+      const nameSpan = cells[0].querySelector('span');
+      if (!nameSpan) continue;
+      const name = nameSpan.textContent.trim();
+      if (!name) continue;
+
+      // Count vacation days per month (red cells: bgcolor=#FF7171)
+      for (let mi = 0; mi < monthSeq.length; mi++) {
+        const ci = mi + 2;
+        if (ci >= cells.length) break;
+        const vacCount = [...cells[ci].querySelectorAll('td')].filter(td => {
+          const bg = (td.getAttribute('bgcolor') || '').toUpperCase();
+          return bg === '#FF7171';
+        }).length;
+
+        if (vacCount > 0) {
+          entries.push({ name, m: monthSeq[mi].m, nextYear: monthSeq[mi].nextYear, days: vacCount });
+        }
+      }
+    }
+  });
+
+  return entries;
+}
+
+function _renderMapaFeriasPreview() {
+  const entries = _mapaFeriasEntries;
+  const previewEl = document.getElementById('mf-preview');
+  const confirmBtn = document.getElementById('mf-confirm');
+  if (!entries || !previewEl) return;
+
+  const baseYear = parseInt(document.getElementById('mf-year').value) || new Date().getFullYear();
+  const hoursPerDay = parseFloat(document.getElementById('mf-hours').value) || 7;
+
+  if (entries.length === 0) {
+    previewEl.innerHTML = '<p style="color:var(--warn); padding:12px 0">Nenhum dia de férias encontrado no ficheiro.</p>';
+    if (confirmBtn) confirmBtn.disabled = true;
+    return;
+  }
+
+  // Group by person (preserving order of first appearance)
+  const order = [];
+  const byPerson = {};
+  for (const e of entries) {
+    if (!byPerson[e.name]) { byPerson[e.name] = []; order.push(e.name); }
+    byPerson[e.name].push(e);
+  }
+
+  let hasMatched = false;
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:var(--neutral-bg);text-align:left">
+      <th style="padding:5px 8px;border-bottom:1px solid var(--line)">Nome SIGEI</th>
+      <th style="padding:5px 8px;border-bottom:1px solid var(--line)">Equipa</th>
+      <th style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:center">Mês</th>
+      <th style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:center">Dias</th>
+      <th style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:center">Horas</th>
+    </tr></thead><tbody>`;
+
+  for (const parsedName of order) {
+    const monthEntries = byPerson[parsedName];
+    const matched = _mfMatchWorker(parsedName);
+    if (matched) hasMatched = true;
+
+    const rowStyle = matched ? '' : 'opacity:0.55';
+    const matchLabel = matched
+      ? `<span style="color:var(--ok)">✅ ${matched}</span>`
+      : '<span style="color:var(--danger)">❌ sem correspondência</span>';
+
+    const sorted = monthEntries.slice().sort((a, b) => {
+      const ya = baseYear + (a.nextYear ? 1 : 0), yb = baseYear + (b.nextYear ? 1 : 0);
+      return ya !== yb ? ya - yb : a.m - b.m;
+    });
+
+    sorted.forEach((e, idx) => {
+      const year = baseYear + (e.nextYear ? 1 : 0);
+      const ym = ymKey(year, e.m);
+      const hours = Math.round(e.days * hoursPerDay);
+      html += `<tr style="border-bottom:1px solid var(--line-soft);${rowStyle}">
+        <td style="padding:5px 8px;font-weight:${idx===0?500:400}">${idx === 0 ? parsedName : ''}</td>
+        <td style="padding:5px 8px">${idx === 0 ? matchLabel : ''}</td>
+        <td style="padding:5px 8px;text-align:center">${ymLabel(ym)}</td>
+        <td style="padding:5px 8px;text-align:center">${e.days}</td>
+        <td style="padding:5px 8px;text-align:center;font-weight:500">${hours}h</td>
+      </tr>`;
+    });
+  }
+
+  html += '</tbody></table>';
+
+  if (!hasMatched) {
+    html += '<p style="color:var(--danger);margin-top:10px;font-size:12px">⚠️ Nenhuma pessoa coincide com a equipa. Verifica os nomes em <strong>Equipa</strong>.</p>';
+  } else {
+    const total = entries.filter(e => _mfMatchWorker(e.name)).length;
+    html += `<p style="color:var(--ink-faint);margin-top:8px;font-size:11px">${total} registo(s) de férias com correspondência · ${entries.length - total} sem correspondência</p>`;
+  }
+
+  previewEl.innerHTML = html;
+  if (confirmBtn) confirmBtn.disabled = !hasMatched;
+}
+
+document.getElementById('btn-import-ferias').onclick = () => {
+  document.getElementById('file-input-ferias').click();
+};
+
+document.getElementById('file-input-ferias').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const entries = _parseMapaFeriasHTML(evt.target.result);
+    if (!entries) {
+      toast('Ficheiro inválido — tabelas de férias não encontradas', 'error');
+      return;
+    }
+    _mapaFeriasEntries = entries;
+    // Infer year from filename (e.g. "mapa_ferias 23-05-2026.html" → 2026)
+    const m = file.name.match(/(\d{4})/);
+    const guessYear = m ? parseInt(m[1]) : new Date().getFullYear();
+    document.getElementById('mf-year').value = guessYear;
+    document.getElementById('mf-hours').value = '7';
+    _renderMapaFeriasPreview();
+    document.getElementById('modal-mapa-ferias').classList.add('active');
+  };
+  // Read as windows-1252 (SIGEI HTML encoding) for correct Portuguese accented names
+  reader.readAsText(file, 'windows-1252');
+});
+
+document.getElementById('mf-year').addEventListener('input', _renderMapaFeriasPreview);
+document.getElementById('mf-hours').addEventListener('input', _renderMapaFeriasPreview);
+
+document.getElementById('mf-cancel').onclick =
+document.getElementById('modal-mapa-ferias-close').onclick = () => {
+  document.getElementById('modal-mapa-ferias').classList.remove('active');
+};
+
+document.getElementById('mf-confirm').onclick = async () => {
+  if (!guardEdit()) return;
+  const entries = _mapaFeriasEntries;
+  if (!entries || !entries.length) return;
+
+  const baseYear = parseInt(document.getElementById('mf-year').value) || new Date().getFullYear();
+  const hoursPerDay = parseFloat(document.getElementById('mf-hours').value) || 7;
+
+  if (!state.absences) state.absences = {};
+  let applied = 0;
+
+  for (const e of entries) {
+    const worker = _mfMatchWorker(e.name);
+    if (!worker) continue;
+    const year = baseYear + (e.nextYear ? 1 : 0);
+    const ym = ymKey(year, e.m);
+    const hours = Math.round(e.days * hoursPerDay);
+    if (!state.absences[worker]) state.absences[worker] = {};
+    state.absences[worker][ym] = { hours, reason: 'Férias' };
+    applied++;
+  }
+
+  if (!applied) {
+    toast('Nenhuma ausência registada — sem correspondências na equipa', 'error');
+    return;
+  }
+
+  await saveState();
+  renderEquipa();
+  document.getElementById('modal-mapa-ferias').classList.remove('active');
+  toast(`${applied} ausência(s) de férias importada(s)`);
 };
 
 // ════════════════════════════════════════════════════════════════════════
