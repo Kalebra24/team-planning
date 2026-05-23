@@ -2616,6 +2616,7 @@ const GL = {
 
   async writeFile(data, message, force = false) {
     // Conflict detection: verificar se o SHA mudou desde o último read
+    // Nota: só activo quando temos um SHA de referência E não é force
     if (!force && state._remoteSha) {
       const currentSha = await this.fetchRemoteSha();
       if (currentSha && currentSha !== state._remoteSha) {
@@ -2623,6 +2624,7 @@ const GL = {
         await showConflictModal(data, message);
         return 'conflict';
       }
+      // SHA bate certo — guardar para atualizar após write
     }
 
     const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}`;
@@ -2637,12 +2639,15 @@ const GL = {
       res = await fetch(url, { method: 'POST', headers: this.headers(), body });
     }
     if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.message || `GitLab write ${res.status}`);
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(`[HTTP ${res.status}] ${errBody.message || errBody.error || 'GitLab write failed'}`);
     }
-    // Actualizar o SHA após write bem-sucedido
-    const result = await res.json().catch(() => ({}));
-    if (result.id) state._remoteSha = result.id;
+    // A API do GitLab Files não devolve o SHA do novo commit na resposta de write.
+    // Fazemos um fetch do SHA pós-write para que o próximo conflict-check seja correcto.
+    try {
+      const newSha = await this.fetchRemoteSha();
+      if (newSha) state._remoteSha = newSha;
+    } catch (_) { /* não bloquear o save se este fetch falhar */ }
     return 'ok';
   },
 };
@@ -2679,7 +2684,9 @@ async function saveState(force = false) {
     updateSyncIndicator('ok');
   } catch (e) {
     console.error('Erro a guardar no GitLab:', e);
-    toast('Erro a guardar no GitLab', 'error');
+    // Mostrar código HTTP para diagnóstico (401 = token expirado, 403 = sem permissão, etc.)
+    const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no GitLab';
+    toast(msg, 'error');
     updateSyncIndicator('error');
   }
 }
