@@ -6,7 +6,6 @@
     "Diogo Cardoso",
     "Fábio Neto",
     "Gonçalo Amorim",
-    "Henrique Pinheiro",
     "João Machado",
     "Luís Silva",
     "Mário Moutinho",
@@ -66,7 +65,7 @@
     },
     {
       "name": "AM2R_UMEC (Mariabike)",
-      "active": false
+      "active": true
     },
     {
       "name": "Embalagem do Futuro",
@@ -78,7 +77,7 @@
     },
     {
       "name": "Hypermorph",
-      "active": false
+      "active": true
     },
     {
       "name": "IOANT",
@@ -1881,36 +1880,6 @@
       "updatedAt": "2026-05-23T22:22:10.982Z"
     },
     {
-      "id": "rec_1779574930980_75",
-      "team": "Processos",
-      "worker": "Henrique Pinheiro",
-      "project": "New Space Portugal_UMEC_P3",
-      "wp": 3,
-      "task": "Task 3.4.3 - Manufacturing and Assembly of Prototypes",
-      "start": "2026-01",
-      "end": "2026-01",
-      "totalHours": 11.2,
-      "monthsHours": {
-        "2026-01": 11.2
-      },
-      "updatedAt": "2026-05-23T22:22:10.982Z"
-    },
-    {
-      "id": "rec_1779574930980_76",
-      "team": "Processos",
-      "worker": "Henrique Pinheiro",
-      "project": "UMEC_Gestao",
-      "wp": 1,
-      "task": "Task 1.1 - Reuniões Mensais ",
-      "start": "2026-01",
-      "end": "2026-01",
-      "totalHours": 2.8,
-      "monthsHours": {
-        "2026-01": 2.8
-      },
-      "updatedAt": "2026-05-23T22:22:10.982Z"
-    },
-    {
       "id": "rec_1779574930980_77",
       "team": "Processos",
       "worker": "João Machado",
@@ -2974,7 +2943,7 @@
       "2026-01": 140,
       "2026-02": 140,
       "2026-03": 140,
-      "2026-04": 140,
+      "2026-04": 126,
       "2026-05": 140,
       "2026-06": 140,
       "2026-07": 140,
@@ -3232,93 +3201,6 @@
       "2033-01": 140
     },
     "Gonçalo Amorim": {
-      "2026-01": 140,
-      "2026-02": 140,
-      "2026-03": 140,
-      "2026-04": 140,
-      "2026-05": 140,
-      "2026-06": 140,
-      "2026-07": 140,
-      "2026-08": 140,
-      "2026-09": 140,
-      "2026-10": 140,
-      "2026-11": 140,
-      "2026-12": 140,
-      "2027-01": 140,
-      "2027-02": 140,
-      "2027-03": 140,
-      "2027-04": 140,
-      "2027-05": 140,
-      "2027-06": 140,
-      "2027-07": 140,
-      "2027-08": 140,
-      "2027-09": 140,
-      "2027-10": 140,
-      "2027-11": 140,
-      "2027-12": 140,
-      "2028-01": 140,
-      "2028-02": 140,
-      "2028-03": 140,
-      "2028-04": 140,
-      "2028-05": 140,
-      "2028-06": 140,
-      "2028-07": 140,
-      "2028-08": 140,
-      "2028-09": 140,
-      "2028-10": 140,
-      "2028-11": 140,
-      "2028-12": 140,
-      "2029-01": 140,
-      "2029-02": 140,
-      "2029-03": 140,
-      "2029-04": 140,
-      "2029-05": 140,
-      "2029-06": 140,
-      "2029-07": 140,
-      "2029-08": 140,
-      "2029-09": 140,
-      "2029-10": 140,
-      "2029-11": 140,
-      "2029-12": 140,
-      "2030-01": 140,
-      "2030-02": 140,
-      "2030-03": 140,
-      "2030-04": 140,
-      "2030-05": 140,
-      "2030-06": 140,
-      "2030-07": 140,
-      "2030-08": 140,
-      "2030-09": 140,
-      "2030-10": 140,
-      "2030-11": 140,
-      "2030-12": 140,
-      "2031-01": 140,
-      "2031-02": 140,
-      "2031-03": 140,
-      "2031-04": 140,
-      "2031-05": 140,
-      "2031-06": 140,
-      "2031-07": 140,
-      "2031-08": 140,
-      "2031-09": 140,
-      "2031-10": 140,
-      "2031-11": 140,
-      "2031-12": 140,
-      "2032-01": 140,
-      "2032-02": 140,
-      "2032-03": 140,
-      "2032-04": 140,
-      "2032-05": 140,
-      "2032-06": 140,
-      "2032-07": 140,
-      "2032-08": 140,
-      "2032-09": 140,
-      "2032-10": 140,
-      "2032-11": 140,
-      "2032-12": 140,
-      "2033-01": 140
-    },
-    "Henrique Pinheiro": {
       "2026-01": 140,
       "2026-02": 140,
       "2026-03": 140,
@@ -4012,7 +3894,136 @@
       "2032-12": 140
     }
   },
-  "absences": {},
+  "absences": {
+    "Alexandre Chícharo": {
+      "2026-03": {
+        "hours": 14,
+        "reason": "Férias"
+      },
+      "2026-04": {
+        "hours": 14,
+        "reason": "Férias"
+      },
+      "2026-06": {
+        "hours": 14,
+        "reason": "Férias"
+      },
+      "2026-08": {
+        "hours": 70,
+        "reason": "Férias"
+      },
+      "2026-10": {
+        "hours": 14,
+        "reason": "Férias"
+      },
+      "2026-12": {
+        "hours": 28,
+        "reason": "Férias"
+      }
+    },
+    "Daniel Gomes": {
+      "2026-04": {
+        "hours": 21,
+        "reason": "Férias"
+      },
+      "2026-06": {
+        "hours": 7,
+        "reason": "Férias"
+      },
+      "2026-08": {
+        "hours": 84,
+        "reason": "Férias"
+      },
+      "2026-12": {
+        "hours": 42,
+        "reason": "Férias"
+      }
+    },
+    "Diogo Cardoso": {
+      "2026-03": {
+        "hours": 7,
+        "reason": "Férias"
+      },
+      "2026-06": {
+        "hours": 21,
+        "reason": "Férias"
+      },
+      "2026-07": {
+        "hours": 35,
+        "reason": "Férias"
+      },
+      "2026-08": {
+        "hours": 42,
+        "reason": "Férias"
+      },
+      "2026-09": {
+        "hours": 28,
+        "reason": "Férias"
+      },
+      "2026-12": {
+        "hours": 21,
+        "reason": "Férias"
+      }
+    },
+    "Fábio Neto": {
+      "2026-02": {
+        "hours": 35,
+        "reason": "Férias"
+      },
+      "2026-06": {
+        "hours": 14,
+        "reason": "Férias"
+      },
+      "2026-08": {
+        "hours": 70,
+        "reason": "Férias"
+      },
+      "2026-11": {
+        "hours": 7,
+        "reason": "Férias"
+      },
+      "2026-12": {
+        "hours": 28,
+        "reason": "Férias"
+      }
+    },
+    "João Machado": {
+      "2026-06": {
+        "hours": 49,
+        "reason": "Férias"
+      },
+      "2026-08": {
+        "hours": 70,
+        "reason": "Férias"
+      },
+      "2026-12": {
+        "hours": 35,
+        "reason": "Férias"
+      }
+    },
+    "Rúben Pereira": {
+      "2026-04": {
+        "hours": 14,
+        "reason": "Férias"
+      },
+      "2026-08": {
+        "hours": 77,
+        "reason": "Férias"
+      },
+      "2026-09": {
+        "hours": 28,
+        "reason": "Férias"
+      },
+      "2026-11": {
+        "hours": 7,
+        "reason": "Férias"
+      },
+      "2026-12": {
+        "hours": 28,
+        "reason": "Férias"
+      }
+    }
+  },
   "config": {
     "editorInitials": "jsilva",
     "lastSyncBaseline": null,
@@ -4020,6 +4031,33 @@
   },
   "changelog": [],
   "sessions": [
+    {
+      "id": "sess_1779575863293_b6cr",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:37:43.293Z",
+      "checked_out_at": null,
+      "is_active": true
+    },
+    {
+      "id": "sess_1779575609191_d9lu",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:33:29.191Z",
+      "checked_out_at": "2026-05-23T22:37:39.174Z",
+      "is_active": false
+    },
+    {
+      "id": "sess_1779575517518_g00y",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:31:57.518Z",
+      "checked_out_at": "2026-05-23T22:32:30.533Z",
+      "is_active": false
+    },
     {
       "id": "sess_1779575135121_h9x2",
       "app_id": "team-planning",

@@ -4438,18 +4438,33 @@ function renderEquipa() {
       html += `<tr><td><strong>${w}</strong></td>`;
       for (let m = 1; m <= 12; m++) {
         const ym = ymKey(year, m);
-        const rawV  = state.capacity[w]?.[ym] ?? '';           // valor base editável
-        const base  = rawV === '' ? state.defaultCapacity : parseFloat(rawV);
+        const rawV   = state.capacity[w]?.[ym] ?? '';  // valor armazenado (já líquido se importado do mapa de férias)
+        const base   = rawV === '' ? state.defaultCapacity : parseFloat(rawV);
         const absence = state.absences?.[w]?.[ym];
-        const dedução = absence && absence.hours > 0 ? absence.hours : 0;
-        const effV  = Math.max(0, base - dedução);             // horas disponíveis reais
+
+        // Ausências de Férias já estão incorporadas no valor de capacidade (deduzidas no import).
+        // Só deduzir ausências manuais (reason !== 'Férias') para não duplicar a dedução.
+        const deducaoManual = absence && absence.hours > 0 && absence.reason !== 'Férias'
+          ? absence.hours : 0;
+        const effV = Math.max(0, base - deducaoManual);
         totalEff += effV;
 
         const safeW = w.replace(/"/g,'&quot;');
-        if (dedução > 0) {
-          // Célula com ausência: fundo âmbar, tooltip explica a dedução
+        const isVac = absence?.reason === 'Férias' && absence.hours > 0;
+
+        if (isVac) {
+          // Férias já deduzidas: mostrar fundo âmbar subtil com tooltip, mas o valor no input é o líquido
+          const tip = `Capacidade líquida após férias (−${absence.hours}h). Editável se necessário.`;
+          html += `<td class="num" style="padding:2px; background:var(--warn-bg)" title="${tip}">
+            <input type="number" min="0" step="0.5" value="${rawV}" placeholder="${state.defaultCapacity}"
+              data-worker="${safeW}" data-ym="${ym}" class="cap-input"
+              style="width:58px; padding:4px 5px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; background:transparent">
+            <div style="font-size:9px; color:var(--warn); text-align:right; line-height:1; padding-bottom:2px">🏖 −${absence.hours}h</div>
+          </td>`;
+        } else if (deducaoManual > 0) {
+          // Ausência manual: mostrar dedução
           const motivo = absence.reason ? ` (${absence.reason})` : '';
-          const tip = `Base: ${base}h − Ausência: ${dedução}h${motivo} = ${effV}h disponíveis`;
+          const tip = `Base: ${base}h − Ausência: ${deducaoManual}h${motivo} = ${effV}h disponíveis`;
           html += `<td class="num" style="padding:2px; background:var(--warn-bg)" title="${tip}">
             <input type="number" min="0" step="0.5" value="${rawV}" placeholder="${state.defaultCapacity}"
               data-worker="${safeW}" data-ym="${ym}" class="cap-input"
@@ -6306,6 +6321,7 @@ document.getElementById('mf-confirm').onclick = async () => {
   const hoursPerDay = parseFloat(document.getElementById('mf-hours').value) || 7;
 
   if (!state.absences) state.absences = {};
+  if (!state.capacity) state.capacity = {};
   let applied = 0;
 
   for (const e of entries) {
@@ -6313,9 +6329,24 @@ document.getElementById('mf-confirm').onclick = async () => {
     if (!worker) continue;
     const year = baseYear + (e.nextYear ? 1 : 0);
     const ym = ymKey(year, e.m);
-    const hours = Math.round(e.days * hoursPerDay);
+    const absHours = Math.round(e.days * hoursPerDay);
+
     if (!state.absences[worker]) state.absences[worker] = {};
-    state.absences[worker][ym] = { hours, reason: 'Férias' };
+    if (!state.capacity[worker]) state.capacity[worker] = {};
+
+    // Recuperar capacidade base: se já existia uma importação de férias anterior,
+    // desfazer essa dedução para obter o valor original antes de recalcular.
+    const prevVacHours = state.absences[worker][ym]?.reason === 'Férias'
+      ? (state.absences[worker][ym].hours || 0) : 0;
+    const storedCap = state.capacity[worker][ym];
+    const capBase = storedCap !== undefined
+      ? parseFloat(storedCap) + prevVacHours          // recuperar base original
+      : state.defaultCapacity;                         // nunca editada → usar default
+
+    // Guardar o valor líquido directamente na tabela de capacidade
+    state.capacity[worker][ym] = Math.max(0, Math.round(capBase - absHours));
+    // Manter registo de ausência como referência (usado em re-importações e na aba Ausências)
+    state.absences[worker][ym] = { hours: absHours, reason: 'Férias' };
     applied++;
   }
 
