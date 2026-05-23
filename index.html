@@ -2611,15 +2611,6 @@ const GL = {
     return { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': this.token };
   },
 
-  // Cabeçalhos para ESCRITA — usa Bearer token OAuth do utilizador (scope api).
-  // Fallback para PRIVATE-TOKEN se não houver sessão activa.
-  async writeHeaders() {
-    const oauthToken = await OAUTH.getToken();
-    if (oauthToken) {
-      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${oauthToken}` };
-    }
-    return this.headers(); // sem sessão — vai falhar em guardEdit() antes de chegar aqui
-  },
 
   isConfigured() { return true; },
 
@@ -2668,16 +2659,15 @@ const GL = {
     }
 
     const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}`;
-    const wh  = await this.writeHeaders(); // Bearer token OAuth do utilizador
     const body = JSON.stringify({
       branch: this.branch,
       commit_message: message || `chore: update planning state [${new Date().toISOString().slice(0,16)}]`,
       content: JSON.stringify(data, null, 2),
     });
-    let res = await fetch(url, { method: 'PUT', headers: wh, body });
+    let res = await fetch(url, { method: 'PUT', headers: this.headers(), body });
     if (res.status === 400 || res.status === 404) {
       // Ficheiro ainda não existe — criar
-      res = await fetch(url, { method: 'POST', headers: wh, body });
+      res = await fetch(url, { method: 'POST', headers: this.headers(), body });
     }
     if (res.status === 403) {
       // O token OAuth não tem scope de escrita (ainda tem scope read_user antigo).
