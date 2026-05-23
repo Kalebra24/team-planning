@@ -9,6 +9,7 @@ pages:
   script:
     - New-Item -ItemType Directory -Force -Path public | Out-Null
     - Copy-Item index.html public\index.html
+    - if (Test-Path manifest.json) { Copy-Item manifest.json public\manifest.json }
     - New-Item -ItemType Directory -Force -Path public\data | Out-Null
     - if (Test-Path data\state.json) { Copy-Item data\state.json public\data\state.json }
     - Write-Host "Contents of public/"; Get-ChildItem public -Recurse

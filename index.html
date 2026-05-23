@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c4541d">
 <!-- GitLab Files API backend — no external SDK needed -->
 <style>
   :root {
@@ -1324,6 +1327,83 @@
     transition: border-color 0.15s, color 0.15s;
   }
   .btn-help:hover { border-color: var(--ink-soft); color: var(--ink); }
+
+  /* ──────── SYNC INDICATOR ──────── */
+  #sync-indicator {
+    font-size: 11px;
+    color: var(--ink-faint);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    padding: 0 4px;
+    transition: opacity 0.3s;
+  }
+  #sync-indicator.saving { color: var(--warn); }
+  #sync-indicator.conflict { color: var(--danger); font-weight: 600; cursor: pointer; }
+  #sync-indicator::before { content: '●'; font-size: 6px; }
+  #sync-indicator.saving::before { animation: blink 0.8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* ──────── UNDO BUTTON ──────── */
+  #btn-undo { opacity: 0.4; pointer-events: none; }
+  #btn-undo.active { opacity: 1; pointer-events: auto; }
+
+  /* ──────── AUTO-REFRESH BANNER ──────── */
+  #refresh-banner {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--bg);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 200;
+    gap: 12px;
+    align-items: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  #refresh-banner.show { display: flex; }
+  #refresh-banner button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* ──────── AUSÊNCIAS ──────── */
+  .absence-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .absence-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--warn-bg); color: var(--warn);
+    border: 1px solid #e0c850; border-radius: 5px;
+    padding: 4px 10px; font-size: 12px;
+  }
+  .absence-chip .x { background: none; border: none; cursor: pointer; color: inherit; font-size: 14px; padding: 0; line-height: 1; }
+  .absence-form-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+  .absence-form-row .field { flex: 1; min-width: 120px; }
+
+  /* ──────── TREND CHART ──────── */
+  #trend-wrap { position: relative; width: 100%; overflow-x: auto; }
+  #trend-svg { display: block; }
+  .trend-tooltip {
+    position: absolute; background: var(--ink); color: var(--bg);
+    padding: 6px 10px; border-radius: 5px; font-size: 11px;
+    pointer-events: none; white-space: nowrap; display: none;
+  }
+
+  /* ──────── CONFLICT MODAL ──────── */
+  #modal-conflict .modal { max-width: 480px; }
+  .conflict-diff { background: var(--bg); border: 1px solid var(--line-soft); border-radius: 6px; padding: 12px; margin: 12px 0; font-size: 12px; line-height: 1.7; }
+  .conflict-diff .added { color: var(--ok); }
+  .conflict-diff .changed { color: var(--warn); }
+  .conflict-diff .removed { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -1378,6 +1458,13 @@
             </button>
           </div>
           <div class="dm-section">
+            <div class="dm-label">Relatórios</div>
+            <button type="button" class="dm-item" id="btn-export-report">
+              <span>📊 Relatório mensal</span>
+              <span class="dm-hint">Horas por projeto e pessoa → Excel</span>
+            </button>
+          </div>
+          <div class="dm-section">
             <div class="dm-label">Sessões</div>
             <button type="button" class="dm-item" id="btn-show-changelog">
               <span>⧗ Diário de alterações</span>
@@ -1388,6 +1475,8 @@
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
       <input type="file" id="file-input-json" accept=".json,application/json" style="display:none">
+      <span id="sync-indicator" title="Estado de sincronização"></span>
+      <button class="btn btn-sm" id="btn-undo" title="Desfazer última ação (Ctrl+Z)" onclick="undoLast()">↩ Desfazer</button>
       <button class="btn-help" id="btn-help" title="Ajuda / Guia de utilização">?</button>
       <button class="btn btn-sm btn-accent" id="btn-submit-plan">↑ Submeter Plano</button>
       <button class="btn btn-sm btn-primary" id="btn-new">+ Nova Alocação</button>
@@ -1518,6 +1607,7 @@
         </select>
         <div class="spacer"></div>
         <span id="heatmap-range-info" style="font-size:11px; color:var(--ink-faint)"></span>
+        <button class="btn btn-sm" onclick="exportHeatmapPNG()" title="Exportar como imagem PNG">↓ PNG</button>
       </div>
       <div class="heatmap-wrap" id="heatmap-wrap"></div>
     </div>
@@ -1578,6 +1668,7 @@
           <span>Mostrar mensais</span>
         </label>
         <span id="gantt-filter-info" style="font-size:11px; color:var(--ink-faint)"></span>
+        <button class="btn btn-sm" onclick="exportGanttPNG()" title="Exportar como imagem PNG">↓ PNG</button>
       </div>
       <div class="gantt-wrap" id="gantt-wrap"></div>
     </div>
@@ -1651,10 +1742,48 @@
       </div>
       <div class="table-wrap" id="cap-wrap"></div>
     </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Ausências e indisponibilidades</div>
+          <div class="card-sub">Meses com capacidade reduzida (ex: férias, baixa) · ajustam automaticamente o heatmap</div>
+        </div>
+      </div>
+      <div class="absence-form-row">
+        <div class="field">
+          <label>Pessoa</label>
+          <select id="abs-worker"><option value="">— selecionar —</option></select>
+        </div>
+        <div class="field">
+          <label>Mês</label>
+          <input type="month" id="abs-month">
+        </div>
+        <div class="field">
+          <label>Horas a deduzir</label>
+          <input type="number" id="abs-hours" placeholder="ex: 70" min="0" step="0.5" style="max-width:120px">
+        </div>
+        <div class="field">
+          <label>Motivo (opcional)</label>
+          <input type="text" id="abs-reason" placeholder="ex: Férias">
+        </div>
+        <button class="btn btn-primary" style="align-self:flex-end" onclick="addAbsence()">+ Registar</button>
+      </div>
+      <div id="abs-list" class="absence-grid"></div>
+    </div>
   </section>
 
   <!-- ═══════════ ARQUIVO ═══════════ -->
   <section class="view" id="view-arquivo">
+    <div class="card" id="trend-card" style="display:none">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Tendência histórica de utilização</div>
+          <div class="card-sub">Utilização média da equipa nos planos submetidos</div>
+        </div>
+      </div>
+      <div id="trend-wrap"><svg id="trend-svg" height="180"></svg><div class="trend-tooltip" id="trend-tip"></div></div>
+    </div>
     <div class="card">
       <div class="card-head">
         <div>
@@ -1690,6 +1819,31 @@
 
 <!-- Tooltip flutuante durante drag -->
 <div class="drag-tooltip" id="drag-tip"></div>
+
+<!-- Auto-refresh banner -->
+<div id="refresh-banner">
+  <span>🔄 Dados atualizados por outro utilizador</span>
+  <button onclick="applyRemoteRefresh()">Recarregar</button>
+  <button onclick="document.getElementById('refresh-banner').classList.remove('show')" style="background:transparent;border:1px solid rgba(255,255,255,0.3)">Ignorar</button>
+</div>
+
+<!-- ═══════════ MODAL: CONFLICT ═══════════ -->
+<div class="modal-bg" id="modal-conflict">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <div class="modal-title">⚠️ Conflito de dados</div>
+      <button class="close-btn" id="modal-conflict-close">×</button>
+    </div>
+    <p style="font-size:13px; margin-bottom:12px; color:var(--ink-soft)">
+      Os dados foram modificados por outro utilizador enquanto editavas. O que pretendes fazer?
+    </p>
+    <div id="conflict-diff" class="conflict-diff"></div>
+    <div style="display:flex; gap:10px; margin-top:18px">
+      <button class="btn" id="conflict-overwrite">Guardar mesmo assim</button>
+      <button class="btn btn-primary" id="conflict-reload">Recarregar dados remotos</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════ MODAL: IMPORT JSON (substituir/mesclar) ═══════════ -->
 <div class="modal-bg" id="modal-import-json">
@@ -2111,12 +2265,16 @@ const state = {
   projects: [],
   records: [],      // {id, team, worker, project, wp, task, start, end, totalHours, monthsHours, updatedAt}
   capacity: {},     // {worker: {YYYY-MM: hours}}
+  absences: {},     // {worker: {YYYY-MM: {hours, reason}}} — horas deduzidas da capacidade
   defaultCapacity: 140,
   lastSyncBaseline: null,  // {timestamp, recordsById: {id: {hash, updatedAt}}} - estado no último sync
   editorInitials: '',      // iniciais do autor (persistente, usadas no nome dos ficheiros)
   planSnapshots: null,     // null = not loaded yet; array once loaded
   changelog: [],           // últimas 200 entradas do diário de alterações
   sessions: [],            // historial de sessões (últimas 100)
+  _undoStack: [],          // snapshots para undo (máx 20, apenas em memória)
+  _lastSavedAt: null,      // ISO timestamp do último save bem-sucedido
+  _remoteSha: null,        // SHA do ficheiro remoto na última leitura (para conflict detection)
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -2389,7 +2547,19 @@ const GL = {
 
   isConfigured() { return true; },
 
+  // Lê o ficheiro e captura o SHA (last_commit_id) para conflict detection
   async readFile() {
+    // Primeiro obter metadata (SHA), depois conteúdo
+    try {
+      const metaUrl = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}?ref=${this.branch}`;
+      const metaRes = await fetch(metaUrl, { headers: this.headers() });
+      if (metaRes.status === 404) { state._remoteSha = null; return null; }
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        state._remoteSha = meta.last_commit_id || null;
+      }
+    } catch (_) { /* ignorar erros de metadata */ }
+
     const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}/raw?ref=${this.branch}&ts=${Date.now()}`;
     const res = await fetch(url, { headers: this.headers() });
     if (res.status === 404) return null;
@@ -2397,7 +2567,28 @@ const GL = {
     return res.json();
   },
 
-  async writeFile(data, message) {
+  // Verifica o SHA remoto atual (sem carregar o conteúdo completo)
+  async fetchRemoteSha() {
+    try {
+      const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}?ref=${this.branch}`;
+      const res = await fetch(url, { headers: this.headers() });
+      if (!res.ok) return null;
+      const meta = await res.json();
+      return meta.last_commit_id || null;
+    } catch (_) { return null; }
+  },
+
+  async writeFile(data, message, force = false) {
+    // Conflict detection: verificar se o SHA mudou desde o último read
+    if (!force && state._remoteSha) {
+      const currentSha = await this.fetchRemoteSha();
+      if (currentSha && currentSha !== state._remoteSha) {
+        // Conflito detectado — mostrar diálogo
+        await showConflictModal(data, message);
+        return 'conflict';
+      }
+    }
+
     const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}`;
     const body = JSON.stringify({
       branch: this.branch,
@@ -2413,21 +2604,29 @@ const GL = {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.message || `GitLab write ${res.status}`);
     }
+    // Actualizar o SHA após write bem-sucedido
+    const result = await res.json().catch(() => ({}));
+    if (result.id) state._remoteSha = result.id;
+    return 'ok';
   },
 };
 
 const APP_ID = 'team-planning';
 
-async function saveState() {
+async function saveState(force = false) {
   if (!GL.isConfigured()) return;
+  updateSyncIndicator('saving');
+  // Guardar snapshot para undo antes de qualquer write
+  pushUndoSnapshot();
   try {
     const now = new Date().toISOString();
     for (const r of state.records) if (!r.updatedAt) r.updatedAt = now;
-    await GL.writeFile({
+    const result = await GL.writeFile({
       workers:   state.workers,
       projects:  state.projects,
       records:   state.records,
       capacity:  state.capacity,
+      absences:  state.absences  || {},
       config: {
         editorInitials:   state.editorInitials   || '',
         lastSyncBaseline: state.lastSyncBaseline || null,
@@ -2435,10 +2634,17 @@ async function saveState() {
       },
       changelog: (state.changelog || []).slice(0, 200),
       sessions:  (state.sessions  || []).slice(0, 100),
-    });
+    }, null, force);
+    if (result === 'conflict') {
+      updateSyncIndicator('conflict');
+      return;
+    }
+    state._lastSavedAt = Date.now();
+    updateSyncIndicator('ok');
   } catch (e) {
     console.error('Erro a guardar no GitLab:', e);
     toast('Erro a guardar no GitLab', 'error');
+    updateSyncIndicator('error');
   }
 }
 
@@ -2479,6 +2685,7 @@ async function loadState() {
       updatedAt:   r.updated_at  ?? r.updatedAt,
     }));
     state.capacity  = data.capacity || {};
+    state.absences  = data.absences || {};
     const cfg = data.config || {};
     state.editorInitials   = cfg.editorInitials   || '';
     state.lastSyncBaseline = cfg.lastSyncBaseline || null;
@@ -2531,12 +2738,18 @@ function uuid() { return `rec_${Date.now()}_${Math.random().toString(36).slice(2
 function round2(n) { return Math.round(n * 100) / 100; }
 
 function getCapacity(worker, ym) {
-  const {y, m} = ymParse(ym);
+  let base;
   if (state.capacity[worker] && state.capacity[worker][ym] !== undefined) {
-    return state.capacity[worker][ym];
+    base = state.capacity[worker][ym];
+  } else {
+    base = state.defaultCapacity;
   }
-  // fallback: 140h
-  return state.defaultCapacity;
+  // Deduzir ausências registadas
+  const absence = state.absences?.[worker]?.[ym];
+  if (absence && absence.hours > 0) {
+    base = Math.max(0, base - absence.hours);
+  }
+  return base;
 }
 
 function getAllYears() {
@@ -2823,6 +3036,7 @@ function renderRecords() {
       <td class="num">${round2(r.totalHours)}</td>
       <td class="actions">
         <button class="btn btn-sm" onclick="editRecord('${r.id}')">Editar</button>
+        <button class="btn btn-sm" onclick="duplicateRecord('${r.id}')" title="Duplicar esta alocação">⧉</button>
       </td>
     </tr>
   `).join('');
@@ -3478,6 +3692,78 @@ function bindMonthlyInputs(redrawFn) {
   });
 }
 
+// ── Drag-to-create state (module-level para evitar listener leaks) ──
+const _gdc = { active: false, worker: null, startYm: null, endYm: null, el: null, track: null, yms: [], nCols: 0 };
+
+function setupGanttDragCreate(ymsRange, nCols) {
+  _gdc.yms = ymsRange;
+  _gdc.nCols = nCols;
+
+  document.querySelectorAll('#gantt-wrap .gantt-row:not(.sum-row):not(.header)').forEach(row => {
+    const track = row.querySelector('.gantt-track[data-worker]');
+    if (!track) return;
+    track.addEventListener('mousedown', _gdcMousedown);
+  });
+}
+
+function _gdcMonthFromX(track, clientX) {
+  const rect = track.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(0.9999, (clientX - rect.left) / rect.width));
+  const idx = Math.floor(ratio * _gdc.nCols);
+  return _gdc.yms[idx] || _gdc.yms[_gdc.nCols - 1];
+}
+
+function _gdcMousedown(e) {
+  if (e.button !== 0) return;
+  if (e.target.closest('.gantt-bar')) return;
+  if (!guardEdit()) return;
+  const track = e.currentTarget;
+  _gdc.active = true;
+  _gdc.worker = track.dataset.worker;
+  _gdc.track = track;
+  _gdc.startYm = _gdcMonthFromX(track, e.clientX);
+  _gdc.endYm = _gdc.startYm;
+  _gdc.el = document.createElement('div');
+  _gdc.el.style.cssText = 'position:absolute;top:4px;bottom:4px;background:rgba(196,84,29,0.2);border:2px dashed var(--accent);border-radius:4px;pointer-events:none;z-index:10;transition:none';
+  track.style.position = 'relative';
+  track.appendChild(_gdc.el);
+  e.preventDefault();
+}
+
+document.addEventListener('mousemove', e => {
+  if (!_gdc.active || !_gdc.el) return;
+  _gdc.endYm = _gdcMonthFromX(_gdc.track, e.clientX);
+  const s = _gdc.startYm <= _gdc.endYm ? _gdc.startYm : _gdc.endYm;
+  const en = _gdc.startYm <= _gdc.endYm ? _gdc.endYm : _gdc.startYm;
+  const si = _gdc.yms.indexOf(s), ei = _gdc.yms.indexOf(en);
+  if (si >= 0 && ei >= 0) {
+    _gdc.el.style.left = `${(si / _gdc.nCols) * 100}%`;
+    _gdc.el.style.width = `${((ei - si + 1) / _gdc.nCols) * 100}%`;
+  }
+  const tip = document.getElementById('drag-tip');
+  tip.textContent = si === ei ? ymLabel(s) : `${ymLabel(s)} → ${ymLabel(en)}`;
+  tip.style.cssText = `position:fixed;top:${e.clientY - 36}px;left:${e.clientX + 8}px;display:block`;
+});
+
+document.addEventListener('mouseup', e => {
+  if (!_gdc.active) return;
+  _gdc.active = false;
+  document.getElementById('drag-tip').style.display = 'none';
+  if (_gdc.el) { _gdc.el.remove(); _gdc.el = null; }
+  const s = _gdc.startYm <= _gdc.endYm ? _gdc.startYm : _gdc.endYm;
+  const en = _gdc.startYm <= _gdc.endYm ? _gdc.endYm : _gdc.startYm;
+  const worker = _gdc.worker;
+  _gdc.worker = null; _gdc.track = null; _gdc.startYm = null; _gdc.endYm = null;
+  if (!s || !en || !worker) return;
+  // Threshold: ignorar cliques simples (sem drag)
+  if (s === en && e.target.closest('.gantt-bar')) return;
+  // Abrir modal
+  openModal({ id: null, worker, project:'', wp:'', task:'', start:s, end:en, totalHours:0, monthsHours:{} });
+  document.getElementById('f-id').value = '';
+  document.getElementById('modal-title').textContent = 'Nova alocação';
+  document.getElementById('modal-delete').style.display = 'none';
+});
+
 function renderGantt() {
   const fromInput = document.getElementById('gantt-from');
   const toInput = document.getElementById('gantt-to');
@@ -3674,6 +3960,11 @@ function renderGantt() {
       document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
         attachBarInteractions(bar, ymsRange, null, draw);
       });
+    }
+
+    // ── Drag-to-create (#5): arrastar na área vazia cria nova alocação ──
+    if (!isMonthly) {
+      setupGanttDragCreate(ymsRange, nCols);
     }
   };
   draw();
@@ -4043,6 +4334,7 @@ function renderEquipa() {
   };
   drawCap();
   yearSel.onchange = drawCap;
+  renderAbsences();
 }
 
 document.getElementById('btn-add-person').onclick = async () => {
@@ -4242,6 +4534,490 @@ window.editRecord = (id) => {
   if (r) openModal(r);
 };
 
+// ════════════════════════════════════════════════════════════════════════
+// DUPLICAR ALOCAÇÃO (#3)
+// ════════════════════════════════════════════════════════════════════════
+window.duplicateRecord = (id) => {
+  if (!guardEdit()) return;
+  const r = state.records.find(x => x.id === id);
+  if (!r) return;
+  // Abre modal pré-preenchido mas sem id (cria novo)
+  const copy = { ...r, id: null, monthsHours: { ...(r.monthsHours || {}) } };
+  openModal(copy);
+  // Sobrescrever f-id para garantir que é criação nova
+  document.getElementById('f-id').value = '';
+  document.getElementById('modal-title').textContent = 'Duplicar alocação';
+  document.getElementById('modal-delete').style.display = 'none';
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// UNDO (#10)
+// ════════════════════════════════════════════════════════════════════════
+function pushUndoSnapshot() {
+  try {
+    const snap = JSON.stringify({
+      workers:  state.workers,
+      projects: state.projects,
+      records:  state.records,
+      capacity: state.capacity,
+      absences: state.absences || {},
+    });
+    state._undoStack.push(snap);
+    if (state._undoStack.length > 20) state._undoStack.shift();
+    document.getElementById('btn-undo').classList.add('active');
+  } catch (_) {}
+}
+
+async function undoLast() {
+  if (!state._undoStack.length) return;
+  if (!confirm('Desfazer a última ação? Os dados serão revertidos para o estado anterior.')) return;
+  try {
+    const snap = JSON.parse(state._undoStack.pop());
+    state.workers  = snap.workers;
+    state.projects = snap.projects;
+    state.records  = snap.records;
+    state.capacity = snap.capacity;
+    state.absences = snap.absences || {};
+    // Guardar sem empurrar novo snapshot para não criar loop
+    const origPush = pushUndoSnapshot;
+    // eslint-disable-next-line no-global-assign
+    window._skipUndoPush = true;
+    await saveStateDirect();
+    window._skipUndoPush = false;
+    renderView(currentView());
+    toast('Ação desfeita');
+    if (!state._undoStack.length) document.getElementById('btn-undo').classList.remove('active');
+  } catch (e) {
+    toast('Erro ao desfazer', 'error');
+  }
+}
+
+// saveState sem push de undo (usado pelo undo para evitar loop)
+async function saveStateDirect() {
+  if (!GL.isConfigured()) return;
+  updateSyncIndicator('saving');
+  try {
+    const now = new Date().toISOString();
+    for (const r of state.records) if (!r.updatedAt) r.updatedAt = now;
+    await GL.writeFile({
+      workers:   state.workers,
+      projects:  state.projects,
+      records:   state.records,
+      capacity:  state.capacity,
+      absences:  state.absences  || {},
+      config: {
+        editorInitials:   state.editorInitials   || '',
+        lastSyncBaseline: state.lastSyncBaseline || null,
+        plan_snapshots:   state.planSnapshots    || [],
+      },
+      changelog: (state.changelog || []).slice(0, 200),
+      sessions:  (state.sessions  || []).slice(0, 100),
+    }, null, true);
+    state._lastSavedAt = Date.now();
+    updateSyncIndicator('ok');
+  } catch (e) {
+    toast('Erro a guardar', 'error');
+    updateSyncIndicator('error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// SYNC INDICATOR (#11)
+// ════════════════════════════════════════════════════════════════════════
+function updateSyncIndicator(status) {
+  const el = document.getElementById('sync-indicator');
+  if (!el) return;
+  el.className = '';
+  if (status === 'saving') {
+    el.className = 'saving';
+    el.textContent = 'A guardar…';
+    el.title = '';
+  } else if (status === 'ok') {
+    el.textContent = 'Guardado';
+    el.title = state._lastSavedAt ? new Date(state._lastSavedAt).toLocaleTimeString('pt-PT') : '';
+    // Actualizar para "há X min" após delay
+    setTimeout(updateSyncRelative, 5000);
+  } else if (status === 'conflict') {
+    el.className = 'conflict';
+    el.textContent = '⚠ Conflito';
+    el.title = 'Clica para resolver o conflito';
+  } else if (status === 'error') {
+    el.textContent = 'Erro ao guardar';
+  }
+}
+
+function updateSyncRelative() {
+  const el = document.getElementById('sync-indicator');
+  if (!el || !state._lastSavedAt) return;
+  if (el.classList.contains('saving') || el.classList.contains('conflict')) return;
+  const mins = Math.floor((Date.now() - state._lastSavedAt) / 60000);
+  if (mins < 1) el.textContent = 'Guardado agora';
+  else if (mins === 1) el.textContent = 'Guardado há 1 min';
+  else el.textContent = `Guardado há ${mins} min`;
+}
+
+// Actualizar o indicador relativo a cada minuto
+setInterval(updateSyncRelative, 60000);
+
+// ════════════════════════════════════════════════════════════════════════
+// AUTO-REFRESH (#2)
+// ════════════════════════════════════════════════════════════════════════
+let _autoRefreshPending = null;
+
+async function checkRemoteChanges() {
+  if (!GL.isConfigured() || !state._remoteSha) return;
+  try {
+    const currentSha = await GL.fetchRemoteSha();
+    if (currentSha && currentSha !== state._remoteSha) {
+      // Há alterações remotas — carregar dados novos mas não aplicar ainda
+      const remoteData = await GL.readFile();
+      if (remoteData) {
+        _autoRefreshPending = remoteData;
+        document.getElementById('refresh-banner').classList.add('show');
+      }
+    }
+  } catch (_) { /* ignorar erros de rede silenciosamente */ }
+}
+
+function applyRemoteRefresh() {
+  if (!_autoRefreshPending) return;
+  const data = _autoRefreshPending;
+  _autoRefreshPending = null;
+  document.getElementById('refresh-banner').classList.remove('show');
+  // Aplicar dados remotos (mesma lógica que loadState mas sem re-fetch)
+  state.workers   = data.workers  || [];
+  state.projects  = data.projects || [];
+  state.records   = (data.records || []).map(r => ({
+    id: r.id, team: r.team, worker: r.worker, project: r.project,
+    wp: r.wp, task: r.task,
+    start: r.start_date ?? r.start, end: r.end_date ?? r.end,
+    totalHours: r.total_hours ?? r.totalHours,
+    monthsHours: r.months_hours ?? r.monthsHours ?? {},
+    updatedAt: r.updated_at ?? r.updatedAt,
+  }));
+  state.capacity  = data.capacity || {};
+  state.absences  = data.absences || {};
+  const cfg = data.config || {};
+  state.planSnapshots = cfg.plan_snapshots || [];
+  state.changelog = data.changelog || [];
+  state.sessions  = data.sessions  || [];
+  renderView(currentView());
+  renderEquipa();
+  toast('Dados actualizados');
+}
+
+// Poll a cada 2 minutos
+setInterval(checkRemoteChanges, 120000);
+
+// ════════════════════════════════════════════════════════════════════════
+// CONFLICT MODAL (#1)
+// ════════════════════════════════════════════════════════════════════════
+let _conflictPendingData = null;
+let _conflictPendingMsg = null;
+
+async function showConflictModal(data, message) {
+  _conflictPendingData = data;
+  _conflictPendingMsg = message;
+  const localCount = (data.records || []).length;
+  const remoteData = _autoRefreshPending || await GL.readFile().catch(() => null);
+  const remoteCount = (remoteData?.records || []).length;
+  document.getElementById('conflict-diff').innerHTML = `
+    <div>Versão local: <strong>${localCount}</strong> alocações</div>
+    <div>Versão remota: <strong>${remoteCount}</strong> alocações</div>
+    <div style="margin-top:8px; color:var(--ink-faint); font-size:11px">O ficheiro foi alterado por outro utilizador após o teu último carregamento.</div>
+  `;
+  document.getElementById('modal-conflict').classList.add('active');
+}
+
+document.getElementById('modal-conflict-close').onclick = () =>
+  document.getElementById('modal-conflict').classList.remove('active');
+
+document.getElementById('conflict-overwrite').onclick = async () => {
+  document.getElementById('modal-conflict').classList.remove('active');
+  if (!_conflictPendingData) return;
+  updateSyncIndicator('saving');
+  try {
+    await GL.writeFile(_conflictPendingData, _conflictPendingMsg, true); // force=true
+    state._lastSavedAt = Date.now();
+    updateSyncIndicator('ok');
+    toast('Guardado (sobrescrito)');
+  } catch (e) {
+    toast('Erro ao guardar', 'error');
+  }
+  _conflictPendingData = null; _conflictPendingMsg = null;
+};
+
+document.getElementById('conflict-reload').onclick = () => {
+  document.getElementById('modal-conflict').classList.remove('active');
+  _conflictPendingData = null; _conflictPendingMsg = null;
+  applyRemoteRefresh();
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// AUSÊNCIAS (#4)
+// ════════════════════════════════════════════════════════════════════════
+function renderAbsences() {
+  const sel = document.getElementById('abs-worker');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— selecionar —</option>' +
+      state.workers.map(w => `<option ${w === cur ? 'selected' : ''}>${w}</option>`).join('');
+  }
+  const list = document.getElementById('abs-list');
+  if (!list) return;
+  const absences = state.absences || {};
+  const chips = [];
+  for (const [worker, months] of Object.entries(absences)) {
+    for (const [ym, info] of Object.entries(months)) {
+      chips.push({ worker, ym, ...info });
+    }
+  }
+  chips.sort((a, b) => (a.worker + a.ym).localeCompare(b.worker + b.ym));
+  if (!chips.length) {
+    list.innerHTML = '<div style="color:var(--ink-faint); font-size:12px; padding:8px 0">Sem ausências registadas.</div>';
+    return;
+  }
+  list.innerHTML = chips.map(c => `
+    <div class="absence-chip">
+      <span><strong>${c.worker}</strong> · ${ymLabel(c.ym)} · −${c.hours}h${c.reason ? ` (${c.reason})` : ''}</span>
+      <button class="x" onclick="removeAbsence('${c.worker.replace(/'/g,"\\'")}','${c.ym}')" title="Remover">×</button>
+    </div>
+  `).join('');
+}
+
+window.addAbsence = async () => {
+  if (!guardEdit()) return;
+  const worker = document.getElementById('abs-worker').value;
+  const ym = document.getElementById('abs-month').value;
+  const hours = parseFloat(document.getElementById('abs-hours').value);
+  const reason = document.getElementById('abs-reason').value.trim();
+  if (!worker) { toast('Seleciona uma pessoa', 'error'); return; }
+  if (!ym) { toast('Seleciona um mês', 'error'); return; }
+  if (isNaN(hours) || hours <= 0) { toast('Indica horas válidas (> 0)', 'error'); return; }
+  if (!state.absences) state.absences = {};
+  if (!state.absences[worker]) state.absences[worker] = {};
+  state.absences[worker][ym] = { hours, reason };
+  await saveState();
+  renderAbsences();
+  toast(`Ausência registada — ${worker} em ${ymLabel(ym)}`);
+};
+
+window.removeAbsence = async (worker, ym) => {
+  if (!guardEdit()) return;
+  if (state.absences?.[worker]) {
+    delete state.absences[worker][ym];
+    if (!Object.keys(state.absences[worker]).length) delete state.absences[worker];
+  }
+  await saveState();
+  renderAbsences();
+  renderView(currentView());
+  toast('Ausência removida');
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// TENDÊNCIA HISTÓRICA (#7)
+// ════════════════════════════════════════════════════════════════════════
+function renderTrendChart() {
+  const snaps = (state.planSnapshots || []).slice().sort((a, b) => a.planMonth.localeCompare(b.planMonth));
+  const card = document.getElementById('trend-card');
+  if (!card) return;
+  if (snaps.length < 2) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  // Calcular utilização média por snapshot
+  const points = snaps.map(s => {
+    const util = {};
+    for (const r of (s.records || [])) {
+      for (const [ym, h] of Object.entries(r.monthsHours || {})) {
+        if (!util[r.worker]) util[r.worker] = {};
+        util[r.worker][ym] = (util[r.worker][ym] || 0) + h;
+      }
+    }
+    const cap = s.capacity || {};
+    let total = 0, count = 0;
+    for (const w of (s.workers || [])) {
+      const ym = s.planMonth;
+      const h = util[w]?.[ym] || 0;
+      const c = cap[w]?.[ym] ?? 140;
+      if (c > 0) { total += h / c; count++; }
+    }
+    return { label: ymLabel(s.planMonth), pct: count > 0 ? Math.round(total / count * 100) : 0 };
+  });
+
+  const W = Math.max(400, points.length * 60);
+  const H = 180;
+  const PAD = { top: 20, right: 20, bottom: 30, left: 40 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
+  const maxPct = Math.max(110, ...points.map(p => p.pct));
+  const xStep = chartW / Math.max(points.length - 1, 1);
+  const yScale = v => chartH - (v / maxPct) * chartH;
+
+  const wrap = document.getElementById('trend-wrap');
+  const svg = document.getElementById('trend-svg');
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // Grid lines at 0%, 50%, 100%
+  let grid = '';
+  [0, 50, 100].forEach(v => {
+    const y = PAD.top + yScale(v);
+    grid += `<line x1="${PAD.left}" x2="${W - PAD.right}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+    grid += `<text x="${PAD.left - 4}" y="${y + 4}" text-anchor="end" font-size="10" fill="var(--ink-faint)">${v}%</text>`;
+  });
+
+  // Line + area
+  const pts = points.map((p, i) => [PAD.left + i * xStep, PAD.top + yScale(p.pct)]);
+  const linePath = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const areaPath = `${linePath} L${pts[pts.length-1][0]},${PAD.top + chartH} L${pts[0][0]},${PAD.top + chartH} Z`;
+
+  // Danger zone (>110%)
+  const dangerY = PAD.top + yScale(110);
+  const dangerFill = `<rect x="${PAD.left}" y="${PAD.top}" width="${chartW}" height="${Math.max(0, dangerY - PAD.top)}" fill="rgba(163,45,31,0.05)"/>`;
+
+  // X labels
+  const labels = points.map((p, i) => {
+    const x = PAD.left + i * xStep;
+    return `<text x="${x}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--ink-faint)">${p.label}</text>`;
+  }).join('');
+
+  // Dots
+  const dots = pts.map((p, i) => {
+    const pct = points[i].pct;
+    const color = pct > 110 ? 'var(--danger)' : pct > 95 ? 'var(--warn)' : 'var(--ok)';
+    return `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${color}" stroke="white" stroke-width="1.5" data-i="${i}" class="trend-dot"/>`;
+  }).join('');
+
+  svg.innerHTML = `
+    ${dangerFill}
+    ${grid}
+    <path d="${areaPath}" fill="rgba(74,103,65,0.08)"/>
+    <path d="${linePath}" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${labels}
+    ${dots}
+  `;
+
+  // Tooltip on hover
+  const tip = document.getElementById('trend-tip');
+  svg.querySelectorAll('.trend-dot').forEach((dot, i) => {
+    dot.addEventListener('mousemove', ev => {
+      tip.style.display = 'block';
+      tip.style.left = (ev.offsetX + 12) + 'px';
+      tip.style.top  = (ev.offsetY - 28) + 'px';
+      tip.textContent = `${points[i].label}: ${points[i].pct}%`;
+    });
+    dot.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// EXPORTAR PNG (#8)
+// ════════════════════════════════════════════════════════════════════════
+async function exportSectionPNG(elementId, filename) {
+  const el = document.getElementById(elementId);
+  if (!el) { toast('Elemento não encontrado', 'error'); return; }
+  if (typeof html2canvas === 'undefined') { toast('html2canvas não disponível', 'error'); return; }
+  toast('A gerar imagem…');
+  try {
+    const canvas = await html2canvas(el, {
+      backgroundColor: '#fbfaf6',
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = filename;
+    a.click();
+    toast('Imagem exportada');
+  } catch (e) {
+    toast('Erro ao exportar imagem', 'error');
+    console.error(e);
+  }
+}
+
+window.exportHeatmapPNG = () => {
+  const now = new Date().toISOString().slice(0,10);
+  exportSectionPNG('heatmap-wrap', `heatmap-${now}.png`);
+};
+
+window.exportGanttPNG = () => {
+  const now = new Date().toISOString().slice(0,10);
+  exportSectionPNG('gantt-wrap', `timeline-${now}.png`);
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// RELATÓRIO MENSAL (#9)
+// ════════════════════════════════════════════════════════════════════════
+function exportMonthlyReport() {
+  const years = getAllYears();
+  const year = parseInt(years[years.length - 1]) || new Date().getFullYear();
+  const months = Array.from({length:12}, (_,i) => ymKey(year, i+1));
+
+  // Folha 1: Horas por Pessoa × Projeto × Mês
+  const header1 = ['Pessoa', 'Projeto', 'WP', 'Atividade', ...months.map(ymLabel), 'Total'];
+  const rows1 = [];
+  for (const r of state.records) {
+    const row = [r.worker, r.project, r.wp || '', r.task || ''];
+    let total = 0;
+    for (const ym of months) {
+      const h = r.monthsHours?.[ym] || 0;
+      row.push(h);
+      total += h;
+    }
+    row.push(round2(total));
+    if (total > 0) rows1.push(row);
+  }
+  rows1.sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
+
+  // Folha 2: Utilização por pessoa × mês
+  const header2 = ['Pessoa', ...months.map(ymLabel), 'Média'];
+  const rows2 = state.workers.map(w => {
+    const row = [w];
+    let total = 0;
+    for (const ym of months) {
+      const h = state.records.filter(r => r.worker === w).reduce((s, r) => s + (r.monthsHours?.[ym] || 0), 0);
+      const cap = getCapacity(w, ym);
+      const pct = cap > 0 ? round2(h / cap * 100) : 0;
+      row.push(pct);
+      total += pct;
+    }
+    row.push(round2(total / 12));
+    return row;
+  });
+
+  // Folha 3: Horas por Projeto × Mês
+  const projs = [...new Set(state.records.map(r => r.project))].sort();
+  const header3 = ['Projeto', ...months.map(ymLabel), 'Total'];
+  const rows3 = projs.map(p => {
+    const row = [p];
+    let total = 0;
+    for (const ym of months) {
+      const h = state.records.filter(r => r.project === p).reduce((s, r) => s + (r.monthsHours?.[ym] || 0), 0);
+      row.push(round2(h));
+      total += h;
+    }
+    row.push(round2(total));
+    return row;
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header1, ...rows1]), 'Alocações detalhadas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header2, ...rows2]), `Utilização % (${year})`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header3, ...rows3]), `Por Projeto (${year})`);
+  XLSX.writeFile(wb, `relatorio-planeamento-${year}.xlsx`);
+  toast('Relatório exportado');
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// DRAG-TO-CREATE NO GANTT (#5)
+// ════════════════════════════════════════════════════════════════════════
+// Implementado via listener nos row-spacers do gantt-wrap (ver renderGantt)
+// A flag abaixo é usada pelo renderGantt para injectar a zona de criação
+const GANTT_DRAG_CREATE = true;
+
 function currentView() {
   return document.querySelector('#tabs button.active').dataset.view;
 }
@@ -4268,6 +5044,18 @@ document.querySelectorAll('.dm-item').forEach(item => {
 
 document.getElementById('btn-show-changelog').onclick = () => showChangelogModal(null, sessionCtx.initials);
 document.getElementById('btn-checkin').onclick = checkIn;
+document.getElementById('btn-export-report').onclick = exportMonthlyReport;
+
+// Ctrl+Z global para undo
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    const active = document.activeElement;
+    // Só ativar se não estiver a editar um campo de texto
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+    e.preventDefault();
+    undoLast();
+  }
+});
 
 // ════════════════════════════════════════════════════════════════════════
 // DOWNLOAD / UPLOAD JSON
@@ -5219,6 +6007,7 @@ function renderArquivo() {
     return;
   }
 
+  renderTrendChart();
   const snaps = state.planSnapshots;
   document.getElementById('archive-count').textContent = snaps.length;
 
@@ -5405,11 +6194,14 @@ document.getElementById('modal-changelog').addEventListener('click', e => {
   }
 
   // 2. Carregar dados
+  updateSyncIndicator('saving');
   const had = await loadState();
   if (!had) {
     await seedFromExcel();
     toast('Dados iniciais carregados');
   }
+  state._lastSavedAt = Date.now();
+  updateSyncIndicator('ok');
 
   // 3. Auto-login se já houver token OAuth válido
   if (!sessionCtx.checkedIn) {
