@@ -1180,13 +1180,10 @@
   .nm-pct.empty  { color: var(--ink-faint); }
   .nm-hours { font-size: 11px; color: var(--ink-faint); }
 
-  /* ──────── SESSION BANNER ──────── */
-  #session-banner {
-    background: var(--warn-bg);
-    border-bottom: 1px solid #d9c077;
+  /* ──────── SESSION BANNER + REAUTH BANNER ──────── */
+  #session-banner, #reauth-banner {
     padding: 8px 32px;
     font-size: 12px;
-    color: #6b5200;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1194,7 +1191,17 @@
     top: 0;
     z-index: 49;
   }
-  #session-banner strong { font-weight: 600; }
+  #session-banner {
+    background: var(--warn-bg);
+    border-bottom: 1px solid #d9c077;
+    color: #6b5200;
+  }
+  #reauth-banner {
+    background: #fff0f0;
+    border-bottom: 1px solid #f5c0c0;
+    color: #7a1f1f;
+  }
+  #session-banner strong, #reauth-banner strong { font-weight: 600; }
   #session-banner button {
     border: 1px solid #b89a00;
     background: transparent;
@@ -1208,7 +1215,21 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
+  #reauth-banner button {
+    border: 1px solid #e08080;
+    background: transparent;
+    color: #7a1f1f;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
   #session-banner button:hover { background: rgba(0,0,0,0.06); }
+  #reauth-banner button:hover  { background: rgba(0,0,0,0.06); }
 
   @media (max-width: 1000px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
@@ -1509,6 +1530,12 @@
   <span>&#128274;</span>
   <span><strong>Modo de leitura</strong> — inicia sessão para fazer alterações.</span>
   <button onclick="checkIn()">Entrar agora</button>
+</div>
+
+<div id="reauth-banner" style="display:none">
+  <span>⚠️</span>
+  <span><strong>Permissões de escrita desactualizadas</strong> — faz <strong>Sair</strong> e <strong>Entrar</strong> novamente para guardar alterações.</span>
+  <button onclick="checkOut()">Sair agora</button>
 </div>
 
 <main>
@@ -2442,12 +2469,14 @@ function updateCheckinUI() {
   const label = document.getElementById('checkin-label');
   const btn = document.getElementById('btn-checkin');
   const banner = document.getElementById('session-banner');
+  const reauthBanner = document.getElementById('reauth-banner');
   if (sessionCtx.checkedIn) {
     pill.classList.add('active');
     label.textContent = sessionCtx.initials;
     btn.textContent = 'Sair';
     btn.onclick = checkOut;
     if (banner) banner.style.display = 'none';
+    if (reauthBanner) reauthBanner.style.display = 'none'; // esconder após re-login
   } else {
     pill.classList.remove('active');
     label.textContent = 'Sem sessão';
@@ -2464,7 +2493,7 @@ const OAUTH = {
   clientId:    '33a3f19adc5d27b42cafb6c3369766acc8c9d6602820a9f85af429781226767e',
   redirectUri: 'https://gitpages.inegi.up.pt/planeamento-d9a840/',
   baseUrl:     'https://git.inegi.up.pt',
-  scope:       'read_user',
+  scope:       'api',
 
   // ── PKCE helpers ────────────────────────────────────────────────────
   async _verifier() {
@@ -2582,6 +2611,16 @@ const GL = {
     return { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': this.token };
   },
 
+  // Cabeçalhos para ESCRITA — usa Bearer token OAuth do utilizador (scope api).
+  // Fallback para PRIVATE-TOKEN se não houver sessão activa.
+  async writeHeaders() {
+    const oauthToken = await OAUTH.getToken();
+    if (oauthToken) {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${oauthToken}` };
+    }
+    return this.headers(); // sem sessão — vai falhar em guardEdit() antes de chegar aqui
+  },
+
   isConfigured() { return true; },
 
   // Lê o ficheiro e captura o SHA (last_commit_id) para conflict detection
@@ -2629,15 +2668,21 @@ const GL = {
     }
 
     const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}`;
+    const wh  = await this.writeHeaders(); // Bearer token OAuth do utilizador
     const body = JSON.stringify({
       branch: this.branch,
       commit_message: message || `chore: update planning state [${new Date().toISOString().slice(0,16)}]`,
       content: JSON.stringify(data, null, 2),
     });
-    let res = await fetch(url, { method: 'PUT', headers: this.headers(), body });
+    let res = await fetch(url, { method: 'PUT', headers: wh, body });
     if (res.status === 400 || res.status === 404) {
       // Ficheiro ainda não existe — criar
-      res = await fetch(url, { method: 'POST', headers: this.headers(), body });
+      res = await fetch(url, { method: 'POST', headers: wh, body });
+    }
+    if (res.status === 403) {
+      // O token OAuth não tem scope de escrita (ainda tem scope read_user antigo).
+      // Instruir o utilizador a fazer logout + login para obter o scope 'api'.
+      throw new Error('[HTTP 403] Permissões insuficientes — faz Sair e Entrar novamente para autorizar a escrita.');
     }
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
@@ -2716,9 +2761,15 @@ async function _saveStateOnce(force = false) {
   } catch (e) {
     _lastSaveError = e.message || 'Erro desconhecido';
     console.error('Erro a guardar no GitLab:', e);
-    // Mostrar código HTTP para diagnóstico (401 = token expirado, 403 = sem permissão, etc.)
-    const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no GitLab';
-    toast(msg, 'error');
+    if (_lastSaveError.includes('[HTTP 403]')) {
+      // Scope insuficiente — mostrar banner persistente a pedir re-login
+      const rb = document.getElementById('reauth-banner');
+      if (rb) rb.style.display = 'flex';
+      toast('Permissões insuficientes — faz Sair e Entrar novamente', 'error');
+    } else {
+      const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no GitLab';
+      toast(msg, 'error');
+    }
     updateSyncIndicator('error');
     return 'error';
   }
