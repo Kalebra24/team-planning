@@ -6223,10 +6223,16 @@ document.getElementById('mf-confirm').onclick = async () => {
   }
 
   await saveState();
-  // Force the cap-year selector to the base year so the imported absences are immediately visible
-  const _capYSel = document.getElementById('cap-year');
-  if (_capYSel) _capYSel.value = String(baseYear);
+  // 1. Render equipa first — this rebuilds the cap-year <select> options
+  //    (getAllYears now includes absence years so baseYear appears in the list)
   renderEquipa();
+  // 2. Now that the <option value="baseYear"> exists, set the selector and
+  //    dispatch 'change' so drawCap() re-runs for the correct year
+  const _capYSel = document.getElementById('cap-year');
+  if (_capYSel && [..._capYSel.options].some(o => o.value === String(baseYear))) {
+    _capYSel.value = String(baseYear);
+    _capYSel.dispatchEvent(new Event('change'));  // triggers drawCap() via yearSel.onchange
+  }
   renderView(currentView());
   document.getElementById('modal-mapa-ferias').classList.remove('active');
   toast(`${applied} ausência(s) de férias importada(s)`);
