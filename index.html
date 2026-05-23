@@ -2655,7 +2655,7 @@ const GL = {
 const APP_ID = 'team-planning';
 
 async function saveState(force = false) {
-  if (!GL.isConfigured()) return;
+  if (!GL.isConfigured()) return 'not_configured';
   updateSyncIndicator('saving');
   // Guardar snapshot para undo antes de qualquer write
   pushUndoSnapshot();
@@ -2678,16 +2678,18 @@ async function saveState(force = false) {
     }, null, force);
     if (result === 'conflict') {
       updateSyncIndicator('conflict');
-      return;
+      return 'conflict';
     }
     state._lastSavedAt = Date.now();
     updateSyncIndicator('ok');
+    return 'ok';
   } catch (e) {
     console.error('Erro a guardar no GitLab:', e);
     // Mostrar código HTTP para diagnóstico (401 = token expirado, 403 = sem permissão, etc.)
     const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no GitLab';
     toast(msg, 'error');
     updateSyncIndicator('error');
+    return 'error';
   }
 }
 
@@ -6229,19 +6231,30 @@ document.getElementById('mf-confirm').onclick = async () => {
     return;
   }
 
-  await saveState();
-  // 1. Render equipa first — this rebuilds the cap-year <select> options
-  //    (getAllYears now includes absence years so baseYear appears in the list)
+  // Fechar o modal ANTES de guardar — se houver conflito, o modal de conflito
+  // fica visível em vez de ficar escondido atrás deste modal
+  document.getElementById('modal-mapa-ferias').classList.remove('active');
+
+  const saveResult = await saveState();
+
+  if (saveResult === 'conflict' || saveResult === 'error') {
+    // saveState já mostrou o modal de conflito ou toast de erro —
+    // não mostrar toast de sucesso enganador
+    return;
+  }
+
+  // Sucesso: actualizar vistas
+  // 1. Render equipa primeiro — reconstrói as opções do <select> de ano
+  //    (getAllYears inclui agora os anos das ausências, então baseYear aparece na lista)
   renderEquipa();
-  // 2. Now that the <option value="baseYear"> exists, set the selector and
-  //    dispatch 'change' so drawCap() re-runs for the correct year
+  // 2. Agora que <option value="baseYear"> existe, definir o selector e
+  //    disparar 'change' para que drawCap() seja chamado com o ano correcto
   const _capYSel = document.getElementById('cap-year');
   if (_capYSel && [..._capYSel.options].some(o => o.value === String(baseYear))) {
     _capYSel.value = String(baseYear);
-    _capYSel.dispatchEvent(new Event('change'));  // triggers drawCap() via yearSel.onchange
+    _capYSel.dispatchEvent(new Event('change'));  // acciona drawCap() via yearSel.onchange
   }
   renderView(currentView());
-  document.getElementById('modal-mapa-ferias').classList.remove('active');
   toast(`${applied} ausência(s) de férias importada(s)`);
 };
 
