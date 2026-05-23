@@ -4032,6 +4032,51 @@
   "changelog": [],
   "sessions": [
     {
+      "id": "sess_1779576468507_sl2o",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:47:48.507Z",
+      "checked_out_at": null,
+      "is_active": true
+    },
+    {
+      "id": "sess_1779576382340_71b5",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:46:22.340Z",
+      "checked_out_at": null,
+      "is_active": true
+    },
+    {
+      "id": "sess_1779576301483_2s49",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:45:01.483Z",
+      "checked_out_at": "2026-05-23T22:45:31.927Z",
+      "is_active": false
+    },
+    {
+      "id": "sess_1779576282673_vn2p",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:44:42.673Z",
+      "checked_out_at": "2026-05-23T22:44:49.305Z",
+      "is_active": false
+    },
+    {
+      "id": "sess_1779576253191_n8xf",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:44:13.191Z",
+      "checked_out_at": null,
+      "is_active": true
+    },
+    {
       "id": "sess_1779575863293_b6cr",
       "app_id": "team-planning",
       "user_initials": "jsilva",

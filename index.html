@@ -3025,7 +3025,9 @@ function renderDashboard() {
   const monthSel = document.getElementById('bar-month');
   const years = getAllYears();
   const curYear = parseInt(yearSel.value) || now.getFullYear();
-  const targetYear = years.includes(curYear) ? curYear : years[Math.floor(years.length/2)] || years[0];
+  const targetYear = years.includes(curYear) ? curYear
+    : (years.includes(now.getFullYear()) ? now.getFullYear()
+    : (years.find(y => y >= now.getFullYear()) || years[years.length - 1] || years[0]));
   yearSel.innerHTML = years.map(y => `<option value="${y}" ${y===targetYear?'selected':''}>${y}</option>`).join('');
 
   // Default bar-month to current month on first render
@@ -4218,7 +4220,10 @@ function renderProjects() {
     const cur = yearSel.value;
     yearSel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
     if (cur && years.includes(parseInt(cur))) yearSel.value = cur;
-    else yearSel.value = years[Math.floor(years.length/2)] || new Date().getFullYear();
+    else {
+      const now = new Date().getFullYear();
+      yearSel.value = years.includes(now) ? now : (years.find(y => y >= now) || years[years.length - 1] || now);
+    }
   }
 
   const draw = () => {
@@ -4426,7 +4431,10 @@ function renderEquipa() {
     const cur = yearSel.value;
     yearSel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
     if (cur && years.includes(parseInt(cur))) yearSel.value = cur;
-    else yearSel.value = years[Math.floor(years.length/2)] || new Date().getFullYear();
+    else {
+      const now = new Date().getFullYear();
+      yearSel.value = years.includes(now) ? now : (years.find(y => y >= now) || years[years.length - 1] || now);
+    }
   }
   const drawCap = () => {
     const year = parseInt(yearSel.value);
