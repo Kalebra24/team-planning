@@ -4953,7 +4953,13 @@ window.exportGanttPNG = () => {
 // ════════════════════════════════════════════════════════════════════════
 function exportMonthlyReport() {
   const years = getAllYears();
-  const year = parseInt(years[years.length - 1]) || new Date().getFullYear();
+  // Default: ano corrente; se não existir nos dados, o mais próximo
+  const curYear = new Date().getFullYear();
+  const defaultYear = years.includes(curYear) ? curYear : years.reduce((best, y) => Math.abs(y - curYear) < Math.abs(best - curYear) ? y : best, years[0]);
+  const chosen = prompt(`Exportar relatório de que ano?\nAnos disponíveis: ${years.join(', ')}`, defaultYear);
+  if (chosen === null) return; // cancelou
+  const year = parseInt(chosen);
+  if (!year || isNaN(year)) { toast('Ano inválido', 'error'); return; }
   const months = Array.from({length:12}, (_,i) => ymKey(year, i+1));
 
   // Folha 1: Horas por Pessoa × Projeto × Mês
