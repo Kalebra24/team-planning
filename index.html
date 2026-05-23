@@ -4304,19 +4304,40 @@ function renderEquipa() {
   const drawCap = () => {
     const year = parseInt(yearSel.value);
     let html = '<table class="data"><thead><tr><th>Pessoa</th>';
-    MONTHS_PT.forEach(m => html += `<th style="text-align:right; min-width:62px">${m}</th>`);
-    html += '<th class="num" style="border-left:1px solid var(--line)">Total</th></tr></thead><tbody>';
+    MONTHS_PT.forEach(m => html += `<th style="text-align:right; min-width:68px">${m}</th>`);
+    html += '<th class="num" style="border-left:1px solid var(--line)">Total disp.</th></tr></thead><tbody>';
     for (const w of state.workers) {
-      let total = 0;
+      let totalEff = 0;
       html += `<tr><td><strong>${w}</strong></td>`;
       for (let m = 1; m <= 12; m++) {
         const ym = ymKey(year, m);
-        const v = state.capacity[w]?.[ym] ?? '';
-        const numericV = v === '' ? state.defaultCapacity : v;
-        total += numericV;
-        html += `<td class="num" style="padding:2px"><input type="number" min="0" step="0.5" value="${v}" placeholder="${state.defaultCapacity}" data-worker="${w.replace(/"/g,'&quot;')}" data-ym="${ym}" class="cap-input" style="width:60px; padding:4px 6px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px"></td>`;
+        const rawV  = state.capacity[w]?.[ym] ?? '';           // valor base editável
+        const base  = rawV === '' ? state.defaultCapacity : parseFloat(rawV);
+        const absence = state.absences?.[w]?.[ym];
+        const dedução = absence && absence.hours > 0 ? absence.hours : 0;
+        const effV  = Math.max(0, base - dedução);             // horas disponíveis reais
+        totalEff += effV;
+
+        const safeW = w.replace(/"/g,'&quot;');
+        if (dedução > 0) {
+          // Célula com ausência: fundo âmbar, tooltip explica a dedução
+          const motivo = absence.reason ? ` (${absence.reason})` : '';
+          const tip = `Base: ${base}h − Ausência: ${dedução}h${motivo} = ${effV}h disponíveis`;
+          html += `<td class="num" style="padding:2px; background:var(--warn-bg)" title="${tip}">
+            <input type="number" min="0" step="0.5" value="${rawV}" placeholder="${state.defaultCapacity}"
+              data-worker="${safeW}" data-ym="${ym}" class="cap-input"
+              style="width:58px; padding:4px 5px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; background:transparent">
+            <div style="font-size:9px; color:var(--warn); text-align:right; line-height:1; padding-bottom:2px">→ ${effV}h</div>
+          </td>`;
+        } else {
+          html += `<td class="num" style="padding:2px">
+            <input type="number" min="0" step="0.5" value="${rawV}" placeholder="${state.defaultCapacity}"
+              data-worker="${safeW}" data-ym="${ym}" class="cap-input"
+              style="width:58px; padding:4px 5px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px">
+          </td>`;
+        }
       }
-      html += `<td class="num" style="border-left:1px solid var(--line); font-weight:600">${round2(total)}</td></tr>`;
+      html += `<td class="num" style="border-left:1px solid var(--line); font-weight:600">${round2(totalEff)}h</td></tr>`;
     }
     html += '</tbody></table>';
     document.getElementById('cap-wrap').innerHTML = html;
@@ -4329,6 +4350,7 @@ function renderEquipa() {
         if (v === null || isNaN(v)) delete state.capacity[w][ym];
         else state.capacity[w][ym] = v;
         await saveState();
+        drawCap(); // re-render para actualizar os totais e as células com ausência
       };
     });
   };
@@ -4798,7 +4820,7 @@ window.addAbsence = async () => {
   if (!state.absences[worker]) state.absences[worker] = {};
   state.absences[worker][ym] = { hours, reason };
   await saveState();
-  renderAbsences();
+  renderEquipa();   // re-render completo: actualiza tabela de capacidade + lista de ausências
   toast(`Ausência registada — ${worker} em ${ymLabel(ym)}`);
 };
 
@@ -4809,8 +4831,8 @@ window.removeAbsence = async (worker, ym) => {
     if (!Object.keys(state.absences[worker]).length) delete state.absences[worker];
   }
   await saveState();
-  renderAbsences();
-  renderView(currentView());
+  renderEquipa();   // re-render completo: actualiza tabela de capacidade + lista de ausências
+  renderView(currentView() !== 'equipa' ? currentView() : 'equipa');
   toast('Ausência removida');
 };
 
