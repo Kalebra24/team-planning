@@ -2745,7 +2745,10 @@ async function _saveStateOnce(force = false) {
       return 'conflict';
     }
     state._lastSavedAt = Date.now();
-    _lastSaveError = ''; // limpar erro anterior após sucesso
+    _lastSaveError = '';
+    // Esconder banner de reauth se estava visível (save voltou a funcionar)
+    const _rb = document.getElementById('reauth-banner');
+    if (_rb) _rb.style.display = 'none';
     updateSyncIndicator('ok');
     return 'ok';
   } catch (e) {
