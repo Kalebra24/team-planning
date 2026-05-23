@@ -1489,8 +1489,8 @@
           <div class="dm-section">
             <div class="dm-label">Relatórios</div>
             <button type="button" class="dm-item" id="btn-export-report">
-              <span>📊 Relatório mensal</span>
-              <span class="dm-hint">Horas por projeto e pessoa → Excel</span>
+              <span>📊 Relatório Visual</span>
+              <span class="dm-hint">Dashboard · Heatmap · Projectos → PDF</span>
             </button>
           </div>
           <div class="dm-section">
@@ -5139,72 +5139,261 @@ window.exportGanttPNG = () => {
 };
 
 // ════════════════════════════════════════════════════════════════════════
-// RELATÓRIO MENSAL (#9)
+// RELATÓRIO VISUAL (#9)
 // ════════════════════════════════════════════════════════════════════════
 function exportMonthlyReport() {
-  const years = getAllYears();
-  // Default: ano corrente; se não existir nos dados, o mais próximo
-  const curYear = new Date().getFullYear();
-  const defaultYear = years.includes(curYear) ? curYear : years.reduce((best, y) => Math.abs(y - curYear) < Math.abs(best - curYear) ? y : best, years[0]);
-  const chosen = prompt(`Exportar relatório de que ano?\nAnos disponíveis: ${years.join(', ')}`, defaultYear);
-  if (chosen === null) return; // cancelou
-  const year = parseInt(chosen);
-  if (!year || isNaN(year)) { toast('Ano inválido', 'error'); return; }
-  const months = Array.from({length:12}, (_,i) => ymKey(year, i+1));
+  const now      = new Date();
+  const allYears = getAllYears();
+  const curYear  = allYears.includes(now.getFullYear()) ? now.getFullYear()
+                 : (allYears[allYears.length - 1] || now.getFullYear());
+  const curM     = now.getMonth() + 1;
+  const curYM    = ymKey(curYear, curM);
+  const yms      = Array.from({length: 12}, (_, i) => ymKey(curYear, i + 1));
+  const ML       = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-  // Folha 1: Horas por Pessoa × Projeto × Mês
-  const header1 = ['Pessoa', 'Projeto', 'WP', 'Atividade', ...months.map(ymLabel), 'Total'];
-  const rows1 = [];
-  for (const r of state.records) {
-    const row = [r.worker, r.project, r.wp || '', r.task || ''];
-    let total = 0;
-    for (const ym of months) {
-      const h = r.monthsHours?.[ym] || 0;
-      row.push(h);
-      total += h;
+  // ── Utilização por pessoa × mês ──────────────────────────────────
+  const util = {};
+  for (const w of state.workers) {
+    util[w] = {};
+    for (const ym of yms) {
+      const cap   = getCapacity(w, ym);
+      const alloc = state.records.reduce((s, r) => r.worker === w ? s + (r.monthsHours?.[ym] || 0) : s, 0);
+      util[w][ym] = { cap, alloc, pct: cap > 0 ? alloc / cap : 0 };
     }
-    row.push(round2(total));
-    if (total > 0) rows1.push(row);
   }
-  rows1.sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
 
-  // Folha 2: Utilização por pessoa × mês
-  const header2 = ['Pessoa', ...months.map(ymLabel), 'Média'];
-  const rows2 = state.workers.map(w => {
-    const row = [w];
-    let total = 0;
-    for (const ym of months) {
-      const h = state.records.filter(r => r.worker === w).reduce((s, r) => s + (r.monthsHours?.[ym] || 0), 0);
-      const cap = getCapacity(w, ym);
-      const pct = cap > 0 ? round2(h / cap * 100) : 0;
-      row.push(pct);
-      total += pct;
+  // ── KPIs ─────────────────────────────────────────────────────────
+  const withCap = state.workers.filter(w => util[w][curYM].cap > 0);
+  const avgUtil = withCap.length
+    ? Math.round(withCap.reduce((s, w) => s + util[w][curYM].pct, 0) / withCap.length * 100) : 0;
+
+  let atRisk = 0;
+  for (const w of state.workers) {
+    let hasWork = false;
+    for (let i = 1; i <= 3; i++) {
+      const fm = ((curM - 1 + i) % 12) + 1;
+      const fy = curYear + Math.floor((curM - 1 + i) / 12);
+      if (state.records.some(r => r.worker === w && (r.monthsHours?.[ymKey(fy, fm)] || 0) > 0)) {
+        hasWork = true; break;
+      }
     }
-    row.push(round2(total / 12));
-    return row;
-  });
+    if (!hasWork) atRisk++;
+  }
+  let overMths = 0;
+  for (const w of state.workers)
+    for (const ym of yms)
+      if (util[w][ym].pct > 1.10) overMths++;
 
-  // Folha 3: Horas por Projeto × Mês
-  const projs = [...new Set(state.records.map(r => r.project))].sort();
-  const header3 = ['Projeto', ...months.map(ymLabel), 'Total'];
-  const rows3 = projs.map(p => {
-    const row = [p];
-    let total = 0;
-    for (const ym of months) {
-      const h = state.records.filter(r => r.project === p).reduce((s, r) => s + (r.monthsHours?.[ym] || 0), 0);
-      row.push(round2(h));
-      total += h;
-    }
-    row.push(round2(total));
-    return row;
-  });
+  // ── Projectos × Pessoa (ano) ─────────────────────────────────────
+  const projs = [...new Set(
+    state.records.filter(r => yms.some(ym => (r.monthsHours?.[ym] || 0) > 0)).map(r => r.project)
+  )].sort();
+  const projH = {};
+  for (const w of state.workers) projH[w] = {};
+  for (const r of state.records) {
+    const h = yms.reduce((s, ym) => s + (r.monthsHours?.[ym] || 0), 0);
+    if (h > 0) projH[r.worker][r.project] = (projH[r.worker][r.project] || 0) + h;
+  }
+  const projTot   = {};
+  for (const p of projs) projTot[p] = state.workers.reduce((s, w) => s + (projH[w]?.[p] || 0), 0);
+  const workerTot = {};
+  for (const w of state.workers) workerTot[w] = projs.reduce((s, p) => s + (projH[w]?.[p] || 0), 0);
+  const grandTotal = projs.reduce((s, p) => s + projTot[p], 0);
+  const maxProjH   = Math.max(...Object.values(projTot), 1);
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header1, ...rows1]), 'Alocações detalhadas');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header2, ...rows2]), `Utilização % (${year})`);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header3, ...rows3]), `Por Projeto (${year})`);
-  XLSX.writeFile(wb, `relatorio-planeamento-${year}.xlsx`);
-  toast('Relatório exportado');
+  // ── Helpers de cor ───────────────────────────────────────────────
+  const hc = p => p === 0 ? '#eceae3' : p < 0.26 ? '#d4eadb' : p < 0.76 ? '#a8d5b0' : p < 0.96 ? '#45b36b' : p <= 1.10 ? '#f0a500' : '#e53e3e';
+  const tc = p => p >= 0.76 ? '#fff' : '#1a1917';
+  const kpiColor = p => p >= 1.10 ? '#e53e3e' : p >= 0.96 ? '#c07000' : p >= 0.76 ? '#2d7a4a' : '#555';
+
+  // ── HTML — Secção 1: barras de utilização ────────────────────────
+  const barsHTML = state.workers.map(w => {
+    const d = util[w][curYM];
+    const barW = Math.min(100, Math.round(d.pct * 100));
+    const label = d.cap > 0 ? `${Math.round(d.pct * 100)}%  ·  ${Math.round(d.alloc)}h / ${d.cap}h` : '—';
+    return `<tr>
+      <td style="width:160px;padding:5px 12px 5px 0;font-size:12px;font-weight:500;white-space:nowrap">${w}</td>
+      <td style="padding:5px 0">
+        <div style="position:relative;height:22px;background:#eceae3;border-radius:4px;overflow:visible">
+          <div style="position:absolute;left:0;top:0;height:100%;width:${barW}%;background:${hc(d.pct)};border-radius:4px;min-width:${d.alloc > 0 ? 2 : 0}px"></div>
+          ${d.pct > 1 ? `<div style="position:absolute;left:100%;top:0;height:100%;width:${Math.min(30, Math.round((d.pct - 1) * 100))}%;background:#e53e3e;opacity:0.6;border-radius:0 4px 4px 0"></div>` : ''}
+        </div>
+      </td>
+      <td style="width:150px;padding:5px 0 5px 12px;font-size:11px;color:#555;white-space:nowrap;font-family:'Courier New',monospace">${label}</td>
+    </tr>`;
+  }).join('');
+
+  // ── HTML — Secção 2: heatmap ─────────────────────────────────────
+  const hmHead = ML.map(m => `<th style="padding:5px 4px;text-align:center;font-size:10px;font-weight:700;color:#888;background:#f2efe8;min-width:42px">${m}</th>`).join('');
+  const hmRows = state.workers.map(w => {
+    const cells = yms.map(ym => {
+      const d = util[w][ym];
+      const txt = d.cap === 0 ? '—' : `${Math.round(d.pct * 100)}%`;
+      return `<td style="padding:6px 2px;text-align:center;font-size:10px;background:${hc(d.pct)};color:${tc(d.pct)};font-weight:${d.pct >= 0.76 ? 700 : 400}">${txt}</td>`;
+    }).join('');
+    const avg = yms.reduce((s, ym) => s + util[w][ym].pct, 0) / 12;
+    return `<tr>
+      <td style="padding:6px 12px 6px 0;font-size:11px;font-weight:500;white-space:nowrap">${w}</td>
+      ${cells}
+      <td style="padding:6px 6px;text-align:center;font-size:10px;background:${hc(avg)};color:${tc(avg)};font-weight:700;border-left:2px solid #ccc">${Math.round(avg * 100)}%</td>
+    </tr>`;
+  }).join('');
+
+  // ── HTML — Secção 3: matriz projectos ────────────────────────────
+  const truncP = p => p.length > 14 ? p.slice(0, 13) + '…' : p;
+  const projHead = projs.map(p =>
+    `<th title="${p}" style="padding:4px 6px;text-align:right;font-size:10px;font-weight:700;color:#666;max-width:80px;white-space:nowrap;overflow:hidden">${truncP(p)}</th>`
+  ).join('');
+  const projRows = state.workers.map(w => {
+    const cells = projs.map(p => {
+      const h = projH[w]?.[p] || 0;
+      const alpha = h > 0 ? 0.12 + 0.70 * (h / maxProjH) : 0;
+      const bg    = h > 0 ? `rgba(196,84,29,${alpha.toFixed(2)})` : 'transparent';
+      const fg    = alpha > 0.55 ? '#fff' : '#333';
+      return `<td style="padding:5px 8px;text-align:right;font-size:10px;background:${bg};color:${fg}">${h > 0 ? Math.round(h) + 'h' : ''}</td>`;
+    }).join('');
+    const tot = workerTot[w];
+    return `<tr>
+      <td style="padding:5px 12px 5px 0;font-size:11px;font-weight:500;white-space:nowrap">${w}</td>
+      ${cells}
+      <td style="padding:5px 8px;text-align:right;font-size:11px;font-weight:700;border-left:2px solid #ccc">${tot > 0 ? Math.round(tot) + 'h' : '—'}</td>
+    </tr>`;
+  }).join('');
+  const totRow = projs.map(p =>
+    `<td style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700;border-top:2px solid #bbb">${Math.round(projTot[p])}h</td>`
+  ).join('');
+
+  // ── Montar HTML ──────────────────────────────────────────────────
+  const genDate = now.toLocaleDateString('pt-PT', {day:'2-digit', month:'long', year:'numeric'});
+  const curML   = ML[curM - 1] + ' ' + curYear;
+
+  const html = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">
+<title>Planeamento de Recursos · ${curYear}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,Arial,sans-serif;color:#1a1917;background:#f0ede6;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.page{width:210mm;max-width:210mm;margin:0 auto 24px;background:#fff;padding:18mm 16mm;min-height:270mm}
+h1{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#1a1917}
+h2{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#999;margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid #e8e4dc}
+.meta{font-size:11px;color:#999;margin-top:3px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.kpi{background:#f6f3ec;border-radius:8px;padding:14px 14px 12px}
+.kpi-l{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:#999;font-weight:700;margin-bottom:5px}
+.kpi-v{font-size:30px;font-weight:800;line-height:1}
+.kpi-s{font-size:9px;color:#aaa;margin-top:4px}
+table{border-collapse:collapse;width:100%}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+.lg{display:flex;align-items:center;gap:5px;font-size:10px;color:#777}
+.ld{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+.print-btn{position:fixed;bottom:28px;right:28px;background:#c4541d;color:#fff;border:none;padding:12px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(196,84,29,.4);z-index:99;letter-spacing:.02em}
+.print-btn:hover{background:#a83e12}
+@media print{
+  body{background:#fff}
+  .print-btn{display:none!important}
+  .page{margin:0;padding:12mm 14mm;page-break-after:always;min-height:unset}
+  .page:last-child{page-break-after:auto}
+}
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+
+<!-- ═══ PÁGINA 1 · RESUMO ═══ -->
+<div class="page">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
+    <div>
+      <h1>Planeamento de Recursos</h1>
+      <div class="meta">Equipa de Processos · INEGI &nbsp;·&nbsp; Gerado em ${genDate}</div>
+    </div>
+    <div style="font-size:36px;font-weight:900;color:#c4541d;letter-spacing:-2px;opacity:.85">${curYear}</div>
+  </div>
+
+  <h2>Indicadores — ${curML}</h2>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-l">Utilização média</div>
+      <div class="kpi-v" style="color:${kpiColor(avgUtil / 100)}">${avgUtil}%</div>
+      <div class="kpi-s">${withCap.length} pessoa(s) com capacidade</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-l">Em risco</div>
+      <div class="kpi-v" style="color:${atRisk > 0 ? '#c07000' : '#2d7a4a'}">${atRisk}</div>
+      <div class="kpi-s">sem trabalho nos próx. 3 meses</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-l">Sobrealocações &gt;110%</div>
+      <div class="kpi-v" style="color:${overMths > 0 ? '#e53e3e' : '#2d7a4a'}">${overMths}</div>
+      <div class="kpi-s">mês×pessoa no ano ${curYear}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-l">Equipa</div>
+      <div class="kpi-v">${state.workers.length}</div>
+      <div class="kpi-s">${state.projects.filter(p => p.active !== false).length} projecto(s) activos</div>
+    </div>
+  </div>
+
+  <h2>Utilização por pessoa — ${curML}</h2>
+  <table style="table-layout:fixed"><tbody>${barsHTML}</tbody></table>
+  <div class="legend" style="margin-top:12px">
+    <div class="lg"><div class="ld" style="background:#eceae3"></div>0% sem alocação</div>
+    <div class="lg"><div class="ld" style="background:#a8d5b0"></div>26–75% normal</div>
+    <div class="lg"><div class="ld" style="background:#45b36b"></div>76–95% bem alocado</div>
+    <div class="lg"><div class="ld" style="background:#f0a500"></div>96–110% atenção</div>
+    <div class="lg"><div class="ld" style="background:#e53e3e"></div>&gt;110% sobrealocado</div>
+  </div>
+</div>
+
+<!-- ═══ PÁGINA 2 · HEATMAP ═══ -->
+<div class="page">
+  <h1>Heatmap de Utilização</h1>
+  <div class="meta">% de capacidade utilizada por pessoa e mês · ${curYear}</div>
+  <h2>Pessoa × Mês</h2>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th style="padding:5px 12px 5px 0;font-size:10px;color:#999"></th>
+        ${hmHead}
+        <th style="padding:5px 6px;text-align:center;font-size:10px;font-weight:700;color:#888;background:#f2efe8;border-left:2px solid #ccc">Média</th>
+      </tr></thead>
+      <tbody>${hmRows}</tbody>
+    </table>
+  </div>
+  <div class="legend" style="margin-top:14px">
+    <div class="lg"><div class="ld" style="background:#eceae3"></div>0%</div>
+    <div class="lg"><div class="ld" style="background:#d4eadb"></div>1–25%</div>
+    <div class="lg"><div class="ld" style="background:#a8d5b0"></div>26–75%</div>
+    <div class="lg"><div class="ld" style="background:#45b36b"></div>76–95%</div>
+    <div class="lg"><div class="ld" style="background:#f0a500"></div>96–110%</div>
+    <div class="lg"><div class="ld" style="background:#e53e3e"></div>&gt;110%</div>
+  </div>
+</div>
+
+<!-- ═══ PÁGINA 3 · PROJECTOS ═══ -->
+<div class="page">
+  <h1>Distribuição por Projecto</h1>
+  <div class="meta">Horas totais alocadas por pessoa e projecto · ${curYear}</div>
+  <h2>Matriz Pessoa × Projecto</h2>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th style="padding:5px 12px 5px 0;font-size:11px;color:#999">Pessoa</th>
+        ${projHead}
+        <th style="padding:5px 8px;text-align:right;font-size:10px;font-weight:700;color:#999;border-left:2px solid #ccc">Total</th>
+      </tr></thead>
+      <tbody>${projRows}</tbody>
+      <tfoot><tr>
+        <td style="padding:7px 12px 5px 0;font-size:11px;font-weight:700;border-top:2px solid #bbb">Total</td>
+        ${totRow}
+        <td style="padding:7px 8px;text-align:right;font-size:11px;font-weight:800;border-left:2px solid #ccc;border-top:2px solid #bbb">${Math.round(grandTotal)}h</td>
+      </tr></tfoot>
+    </table>
+  </div>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Permite popups para este site e tenta novamente', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
+  toast('Relatório gerado — usa Ctrl+P para guardar PDF');
 }
 
 // ════════════════════════════════════════════════════════════════════════

@@ -4032,13 +4032,22 @@
   "changelog": [],
   "sessions": [
     {
+      "id": "sess_1779576705222_vc2g",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-23T22:51:45.222Z",
+      "checked_out_at": null,
+      "is_active": true
+    },
+    {
       "id": "sess_1779576468507_sl2o",
       "app_id": "team-planning",
       "user_initials": "jsilva",
       "user_name": "João Pedro Silva",
       "checked_in_at": "2026-05-23T22:47:48.507Z",
-      "checked_out_at": null,
-      "is_active": true
+      "checked_out_at": "2026-05-23T22:51:36.224Z",
+      "is_active": false
     },
     {
       "id": "sess_1779576382340_71b5",
