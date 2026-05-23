@@ -2795,6 +2795,13 @@ function getAllYears() {
       years.add(ymParse(ym).y);
     }
   }
+  // Include years from capacity and absence entries so the cap table always shows relevant years
+  for (const wCap of Object.values(state.capacity || {})) {
+    for (const ym of Object.keys(wCap)) years.add(ymParse(ym).y);
+  }
+  for (const wAbs of Object.values(state.absences || {})) {
+    for (const ym of Object.keys(wAbs)) years.add(ymParse(ym).y);
+  }
   if (years.size === 0) {
     const now = new Date();
     years.add(now.getFullYear());
@@ -5988,10 +5995,17 @@ function _mfMatchWorker(parsedName) {
   // 1. Exact normalized match
   let w = state.workers.find(x => _mfNormName(x) === norm);
   if (w) return w;
-  // 2. Partial match (one is a substring of the other)
+  // 2. Token-subset match: all tokens of the shorter name appear in the longer name
+  //    Handles middle names (e.g. "João Miguel Machado" → "João Machado"):
+  //    ["joao","machado"] ⊆ ["joao","miguel","machado"] → match
+  const parsedTokens = norm.split(' ').filter(Boolean);
   w = state.workers.find(x => {
     const wn = _mfNormName(x);
-    return wn.length > 3 && (norm.includes(wn) || wn.includes(norm));
+    const wnTokens = wn.split(' ').filter(Boolean);
+    const shorter = parsedTokens.length <= wnTokens.length ? parsedTokens : wnTokens;
+    const longer  = parsedTokens.length <= wnTokens.length ? wnTokens  : parsedTokens;
+    // Require at least 2 tokens and full containment
+    return shorter.length >= 2 && shorter.every(t => longer.includes(t));
   });
   return w || null;
 }
@@ -6209,7 +6223,11 @@ document.getElementById('mf-confirm').onclick = async () => {
   }
 
   await saveState();
+  // Force the cap-year selector to the base year so the imported absences are immediately visible
+  const _capYSel = document.getElementById('cap-year');
+  if (_capYSel) _capYSel.value = String(baseYear);
   renderEquipa();
+  renderView(currentView());
   document.getElementById('modal-mapa-ferias').classList.remove('active');
   toast(`${applied} ausência(s) de férias importada(s)`);
 };
