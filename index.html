@@ -1339,8 +1339,9 @@
     padding: 0 4px;
     transition: opacity 0.3s;
   }
-  #sync-indicator.saving { color: var(--warn); }
-  #sync-indicator.conflict { color: var(--danger); font-weight: 600; cursor: pointer; }
+  #sync-indicator.saving  { color: var(--warn); }
+  #sync-indicator.conflict{ color: var(--danger); font-weight: 600; cursor: pointer; }
+  #sync-indicator.error   { color: var(--danger); cursor: pointer; text-decoration: underline dotted; }
   #sync-indicator::before { content: '●'; font-size: 6px; }
   #sync-indicator.saving::before { animation: blink 0.8s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
@@ -2654,8 +2655,36 @@ const GL = {
 
 const APP_ID = 'team-planning';
 
+// Serialização de saves: apenas um save ativo de cada vez.
+// Se chegar outro pedido durante um save, guarda-se novamente logo depois.
+let _saveInProgress = false;
+let _saveQueued     = false;
+
 async function saveState(force = false) {
   if (!GL.isConfigured()) return 'not_configured';
+
+  // Se já há um save em curso, marcar para re-save e sair
+  if (_saveInProgress) {
+    _saveQueued = true;
+    return 'queued';
+  }
+  _saveInProgress = true;
+
+  let result;
+  try {
+    result = await _saveStateOnce(force);
+  } finally {
+    _saveInProgress = false;
+    // Se ocorreram alterações enquanto guardávamos, guardar de novo
+    if (_saveQueued) {
+      _saveQueued = false;
+      setTimeout(() => saveState(), 100);
+    }
+  }
+  return result;
+}
+
+async function _saveStateOnce(force = false) {
   updateSyncIndicator('saving');
   // Guardar snapshot para undo antes de qualquer write
   pushUndoSnapshot();
@@ -2681,9 +2710,11 @@ async function saveState(force = false) {
       return 'conflict';
     }
     state._lastSavedAt = Date.now();
+    _lastSaveError = ''; // limpar erro anterior após sucesso
     updateSyncIndicator('ok');
     return 'ok';
   } catch (e) {
+    _lastSaveError = e.message || 'Erro desconhecido';
     console.error('Erro a guardar no GitLab:', e);
     // Mostrar código HTTP para diagnóstico (401 = token expirado, 403 = sem permissão, etc.)
     const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no GitLab';
@@ -4698,10 +4729,14 @@ async function saveStateDirect() {
 // ════════════════════════════════════════════════════════════════════════
 // SYNC INDICATOR (#11)
 // ════════════════════════════════════════════════════════════════════════
-function updateSyncIndicator(status) {
+let _lastSaveError = ''; // detalhe do último erro de save (para diagnóstico)
+
+function updateSyncIndicator(status, errorDetail) {
   const el = document.getElementById('sync-indicator');
   if (!el) return;
   el.className = '';
+  el.onclick = null;
+  el.style.cursor = '';
   if (status === 'saving') {
     el.className = 'saving';
     el.textContent = 'A guardar…';
@@ -4716,7 +4751,21 @@ function updateSyncIndicator(status) {
     el.textContent = '⚠ Conflito';
     el.title = 'Clica para resolver o conflito';
   } else if (status === 'error') {
-    el.textContent = 'Erro ao guardar';
+    el.className = 'error';
+    // Mostrar código HTTP se disponível (e.g. "Erro [403]") para diagnóstico imediato
+    const code = errorDetail || ((_lastSaveError.match(/\[HTTP (\d+)\]/) || [])[1]);
+    el.textContent = code ? `Erro ao guardar [${code}]` : 'Erro ao guardar';
+    el.title = _lastSaveError
+      ? `${_lastSaveError}\n\nClica para copiar o detalhe do erro.`
+      : 'Erro de gravação — clica para ver detalhes';
+    el.onclick = () => {
+      const msg = _lastSaveError || 'Sem detalhe disponível';
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(msg).then(() => toast('Detalhe do erro copiado'));
+      } else {
+        alert(`Detalhe do erro:\n\n${msg}`);
+      }
+    };
   }
 }
 
