@@ -10,7 +10,7 @@ e regista todas as alterações com identificação do autor.
 
 ## Funcionalidades
 
-| Vista | O que faz |
+| Vista / Função | O que faz |
 |---|---|
 | **Dashboard** | Utilização média, pessoas em risco, próximo mês, sobrealocações |
 | **Alocações** | Tabela CRUD — pessoa, projeto, WP, tarefa, datas, horas |
@@ -19,6 +19,8 @@ e regista todas as alterações com identificação do autor.
 | **Por Projeto** | Resumo de horas e PM por projeto e mês |
 | **Equipa** | Edição de capacidades mensais por pessoa |
 | **Arquivo** | Snapshots mensais do plano para consulta histórica |
+| **Ausências / Férias** | Importa mapa de férias SIGEI (HTML); actualiza capacidades automaticamente |
+| **Relatório Visual** | Relatório de 3 páginas imprimível: resumo, heatmap, matriz pessoa × projecto |
 
 ---
 
@@ -64,8 +66,22 @@ Nas visitas seguintes o login é automático (token guardado no browser).
 
 ### Importar / Exportar
 - **Dados → Importar Excel** — carrega um ficheiro `.xlsx` com a estrutura esperada
-- **Dados → Exportar JSON / Excel** — exporta o estado actual
+- **Dados → Descarregar / Carregar JSON** — backup e restauro completo do estado
+- **Dados → 📅 Importar Mapa de Férias** — carrega o ficheiro HTML exportado do SIGEI e actualiza automaticamente as capacidades mensais (ausências reduzem a capacidade disponível a 8h/dia)
+- **Dados → 📊 Relatório Visual** — gera relatório de 3 páginas imprimível como PDF
 - **Submeter Plano** — guarda um snapshot do mês no Arquivo
+
+---
+
+## Ausências e Férias
+
+A capacidade efectiva de cada pessoa é calculada subtraindo as horas de ausência à
+capacidade base. As férias importadas do SIGEI ficam registadas em `state.absences` e
+o valor líquido é guardado directamente em `state.capacity[pessoa][YYYY-MM]`.
+
+- Células com férias mostram **🏖 −Xh** na tabela de capacidades
+- Células com ausências manuais mostram a capacidade efectiva reduzida
+- A importação é **idempotente**: reimportar com dados actualizados substitui sem duplicar
 
 ---
 
@@ -79,11 +95,15 @@ Nas visitas seguintes o login é automático (token guardado no browser).
                   "start": "YYYY-MM", "end": "YYYY-MM",
                   "totalHours": 0, "monthsHours": {"YYYY-MM": 0} }],
   "capacity":  { "Nome Apelido": { "YYYY-MM": 140 } },
+  "absences":  { "Nome Apelido": { "YYYY-MM": { "hours": 16, "reason": "Férias" } } },
   "config":    { "editorInitials": "...", "plan_snapshots": [...] },
   "changelog": [{ "user_initials": "jsilva", "action": "update", ... }],
   "sessions":  [{ "user_initials": "jsilva", "checked_in_at": "...", ... }]
 }
 ```
+
+> **Nota:** `capacity[pessoa][YYYY-MM]` guarda sempre o valor **líquido** (após dedução de férias).
+> O campo `absences` é referência — a capacidade efectiva já está em `capacity`.
 
 ---
 
@@ -91,7 +111,8 @@ Nas visitas seguintes o login é automático (token guardado no browser).
 
 O ficheiro `.gitlab-ci.yml` configura um pipeline com um único job (`pages`) que:
 1. Copia `index.html` para `public/`
-2. Faz upload do artefacto para o GitLab Pages
+2. Copia `manifest.json` e `data/state.json` se existirem
+3. Faz upload do artefacto para o GitLab Pages
 
 O deploy corre automaticamente em cada push para `main`.
 
@@ -106,6 +127,14 @@ Start-Process -FilePath "C:\gitlab-runner\gitlab-runner.exe" `
   -ArgumentList "run --config `"C:\gitlab-runner\config.toml`"" `
   -WindowStyle Hidden
 ```
+
+### Git remotes
+
+O repositório tem dois remotes:
+- **`gitlab`** — `git.inegi.up.pt` (fonte do deploy — pushing aqui actualiza o Pages)
+- **`origin`** — GitHub (mirror)
+
+Para publicar alterações: `git push gitlab main` (e opcionalmente `git push origin main`).
 
 ---
 
@@ -122,7 +151,8 @@ A aplicação usa **GitLab OAuth 2.0 com PKCE** (sem segredo de cliente, adequad
 
 O token OAuth é guardado no `localStorage` do browser e refrescado automaticamente.
 A identidade do utilizador (username GitLab) é verificada via `/api/v4/user` —
-não pode ser forjada.
+não pode ser forjada. O OAuth serve **apenas para identificação** — as escritas no
+repositório usam o Project Access Token.
 
 ---
 
@@ -132,7 +162,11 @@ A leitura e escrita do `data/state.json` usa um **Project Access Token** com sco
 hardcoded no `index.html` (equivalente à *anon key* do Supabase — visível no source,
 mas com acesso limitado a este projecto).
 
-Para regenerar o token: **Settings → Access Tokens → app-token**.
+Para regenerar o token:
+1. Vai a **Settings → Access Tokens** no projecto GitLab
+2. Revoga o token existente (`app-token`)
+3. Cria novo com role **Developer** e scope **`api`**
+4. Substitui o valor em `GL.token` no `index.html` e faz push
 
 ---
 

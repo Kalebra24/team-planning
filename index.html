@@ -2067,7 +2067,8 @@
         <a onclick="helpGo('h-projetos')">7. Por Projeto</a>
         <a onclick="helpGo('h-equipa')">8. Equipa</a>
         <a onclick="helpGo('h-arquivo')">9. Arquivo</a>
-        <a onclick="helpGo('h-dados')">10. Dados</a>
+        <a onclick="helpGo('h-ausencias')">10. Ausências e Férias</a>
+        <a onclick="helpGo('h-dados')">11. Dados</a>
         <div class="hn-sep"></div>
         <a onclick="helpGo('h-faq')">FAQ</a>
       </nav>
@@ -2186,7 +2187,7 @@
         <p>Adiciona pessoas com nome e capacidade mensal por omissão (padrão: 140h). Remove com o ícone 🗑️ (só se não tiver alocações).</p>
         <h3>Capacidade mensal</h3>
         <p>Tabela editável com horas disponíveis por pessoa × mês. Selecciona o ano e clica directamente nas células para editar. Célula vazia = 140h. Guarda ao sair da célula.</p>
-        <div class="tip">As capacidades são usadas para calcular as percentagens de utilização em todo o planeamento.</div>
+        <div class="tip">As capacidades são usadas para calcular as percentagens de utilização em todo o planeamento. Quando importas o mapa de férias, os valores desta tabela são actualizados automaticamente — as células de férias mostram o valor líquido disponível.</div>
 
         <h2 id="h-arquivo">9. Arquivo</h2>
         <p>Histórico de snapshots mensais do plano — útil após cada revisão de chefes de equipa.</p>
@@ -2200,7 +2201,22 @@
         <p>Clica <strong>Ver</strong> numa linha do arquivo para abrir o snapshot. A partir daí podes <strong>Restaurar estado</strong> (substitui os dados actuais) ou <strong>Eliminar do arquivo</strong>.</p>
         <div class="warn-note">⚠️ Restaurar substitui permanentemente os dados actuais. Faz um backup (Dados → Descarregar JSON) antes se necessário.</div>
 
-        <h2 id="h-dados">10. Dados — Importar e Exportar</h2>
+        <h2 id="h-ausencias">10. Ausências e Férias</h2>
+        <p>A aplicação tem em conta as ausências de cada pessoa ao calcular a capacidade efectiva — garantindo que as percentagens de utilização reflectem a disponibilidade real.</p>
+        <h3>Importar Mapa de Férias (SIGEI)</h3>
+        <ol>
+          <li>No SIGEI, exporta o mapa de férias em formato <strong>HTML</strong></li>
+          <li>Na aplicação, abre <strong>Dados ▾ → 📅 Importar Mapa de Férias</strong></li>
+          <li>Selecciona o ficheiro <code>.html</code> exportado</li>
+          <li>Clica <strong>Importar</strong></li>
+        </ol>
+        <p>A importação actualiza automaticamente a tabela de capacidades: para cada pessoa e mês com férias registadas, a capacidade efectiva é reduzida pelo número de horas de ausência (calculado com base em 8h/dia). Os meses com férias ficam assinalados com 🏖 na tabela da Equipa.</p>
+        <div class="tip">A importação é idempotente — podes repetir sem duplicar. Se importares de novo com dados diferentes, os valores são actualizados.</div>
+        <h3>Ausências manuais</h3>
+        <p>Na tab <strong>Equipa → Capacidade mensal</strong>, podes introduzir ausências pontuais directamente nas células da tabela. As células com ausências ficam destacadas a âmbar.</p>
+        <div class="warn-note">⚠️ Não registar as mesmas ausências manualmente e via importação do mapa de férias — os valores serão somados incorrectamente.</div>
+
+        <h2 id="h-dados">11. Dados — Importar e Exportar</h2>
         <p>Acessível pelo menu <strong>Dados ▾</strong> no cabeçalho.</p>
         <table>
           <thead><tr><th>Opção</th><th>Uso</th></tr></thead>
@@ -2208,11 +2224,14 @@
             <tr><td><strong>↓ Descarregar JSON</strong></td><td>Backup completo do estado actual</td></tr>
             <tr><td><strong>↑ Carregar JSON</strong></td><td>Repõe ou mescla dados a partir de ficheiro</td></tr>
             <tr><td><strong>↑ Importar Excel</strong></td><td>Carrega o ficheiro .xlsx de planeamento original</td></tr>
-            <tr><td><strong>↓ Exportar Excel</strong></td><td>Gera .xlsx com todas as alocações actuais</td></tr>
+            <tr><td><strong>📅 Importar Mapa de Férias</strong></td><td>Actualiza capacidades a partir do ficheiro HTML do SIGEI</td></tr>
+            <tr><td><strong>📊 Relatório Visual</strong></td><td>Gera relatório de 3 páginas (resumo, heatmap, projectos) — imprimível como PDF</td></tr>
             <tr><td><strong>⧗ Diário de alterações</strong></td><td>Histórico de todas as modificações com autor e data</td></tr>
           </tbody>
         </table>
         <div class="tip">Ao iniciar sessão, o diário mostra automaticamente o que mudou desde a tua última visita.</div>
+        <h3>Relatório Visual</h3>
+        <p>Gera uma página HTML com 3 secções imprimíveis: <strong>Resumo</strong> (indicadores KPI + barras por pessoa), <strong>Heatmap</strong> (utilização pessoa × mês) e <strong>Distribuição por Projecto</strong> (matriz pessoa × projecto). Usa o botão <em>🖨 Imprimir / Guardar PDF</em> no relatório para exportar para PDF.</p>
 
         <h2 id="h-faq">Perguntas Frequentes</h2>
         <h3>As alterações são guardadas automaticamente?</h3>
@@ -5254,7 +5273,7 @@ function exportMonthlyReport() {
     }).join('');
     const tot = workerTot[w];
     return `<tr>
-      <td style="padding:5px 12px 5px 0;font-size:11px;font-weight:500;white-space:nowrap">${w}</td>
+      <td style="padding:5px 12px 5px 0;font-size:11px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:2">${w}</td>
       ${cells}
       <td style="padding:5px 8px;text-align:right;font-size:11px;font-weight:700;border-left:2px solid #ccc">${tot > 0 ? Math.round(tot) + 'h' : '—'}</td>
     </tr>`;
@@ -5374,13 +5393,13 @@ table{border-collapse:collapse;width:100%}
   <div style="overflow-x:auto">
     <table>
       <thead><tr>
-        <th style="padding:5px 12px 5px 0;font-size:11px;color:#999">Pessoa</th>
+        <th style="padding:5px 12px 5px 0;font-size:11px;color:#999;position:sticky;left:0;background:#fff;z-index:3">Pessoa</th>
         ${projHead}
         <th style="padding:5px 8px;text-align:right;font-size:10px;font-weight:700;color:#999;border-left:2px solid #ccc">Total</th>
       </tr></thead>
       <tbody>${projRows}</tbody>
       <tfoot><tr>
-        <td style="padding:7px 12px 5px 0;font-size:11px;font-weight:700;border-top:2px solid #bbb">Total</td>
+        <td style="padding:7px 12px 5px 0;font-size:11px;font-weight:700;border-top:2px solid #bbb;position:sticky;left:0;background:#fff;z-index:2">Total</td>
         ${totRow}
         <td style="padding:7px 8px;text-align:right;font-size:11px;font-weight:800;border-left:2px solid #ccc;border-top:2px solid #bbb">${Math.round(grandTotal)}h</td>
       </tr></tfoot>
