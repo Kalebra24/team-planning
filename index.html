@@ -414,6 +414,9 @@
   }
   .badge.ok { background: var(--ok-bg); color: var(--ok); }
   .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .unit-toggle { display: inline-flex; gap: 2px; margin-left: 8px; vertical-align: middle; }
+  .unit-btn { font-size: 11px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 4px; background: transparent; cursor: pointer; color: var(--ink-faint); font-weight: 600; line-height: 1.6; }
+  .unit-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   /* Multi-select dropdown (filtros Gantt) */
   .multiselect { position: relative; }
@@ -966,7 +969,18 @@
     gap: 0;
   }
   .gantt.monthly-mode .gantt-bar:hover { filter: none; box-shadow: 0 0 0 1px var(--ink); }
-  .gantt.monthly-mode .gantt-bar .gb-handle { display: none; }
+  .gantt.monthly-mode .gantt-bar .gb-handle:not(.gb-month-resize) { display: none; }
+  .gantt.monthly-mode .gb-month-resize {
+    display: block;
+    cursor: ew-resize;
+    width: 8px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 0 3px 3px 0;
+    border-right: 2px solid rgba(255,255,255,0.5);
+    flex-shrink: 0;
+    z-index: 3;
+  }
+  .gantt.monthly-mode .gb-month-resize:hover { background: rgba(255,255,255,0.5); }
   .gantt.monthly-mode .gantt-bar .gb-name {
     position: absolute;
     top: -16px;
@@ -2311,7 +2325,7 @@
           <input type="month" id="f-end" required>
         </div>
         <div class="field">
-          <label>Horas totais *</label>
+          <label>Total * <span class="unit-toggle"><button type="button" class="unit-btn active" id="f-unit-h" data-unit="h">h</button><button type="button" class="unit-btn" id="f-unit-pm" data-unit="pm">PM</button></span></label>
           <input type="number" id="f-hours" min="0" step="0.5" required>
         </div>
         <div class="field" style="grid-column: span 3">
@@ -3396,8 +3410,11 @@ function attachBarInteractions(bar, ymsRange, _yearUnused, redrawFn) {
 function onBarPointerDown(e, bar, ymsRange, redrawFn) {
   if (e.button !== 0) return;
   if (!guardEdit()) return;
+  if (e.target.closest('input, .gb-month-cell')) return; // month inputs handle themselves
   const handle = e.target.closest('.gb-handle');
+  const isMonthlyMode = !!bar.closest('.gantt.monthly-mode');
   const mode = handle ? (handle.dataset.handle === 'left' ? 'resize-left' : 'resize-right') : 'move';
+  if (isMonthlyMode && mode !== 'resize-right') return; // monthly mode: only right-resize via handle
   const recordId = bar.dataset.id;
   const rec = state.records.find(r => r.id === recordId);
   if (!rec) return;
@@ -4075,7 +4092,8 @@ function renderGantt() {
           }).join('');
           barInner = `<div class="gb-month-grid" style="grid-template-columns:repeat(${monthsActive.length}, 1fr)">${cells}</div>
             ${hideName ? '' : `<span class="gb-name">${label}</span>`}
-            <span class="gb-pm">${pmDisplay} PM</span>`;
+            <span class="gb-pm">${pmDisplay} PM</span>
+            <div class="gb-handle gb-h-right gb-month-resize" data-handle="right" title="Arrastar para alterar data de fim"></div>`;
         } else {
           const compactLabel = ganttView.unit === 'h' ? `${round2(hRange)}h` : `${pmDisplay} PM`;
           barInner = `<div class="gb-handle gb-h-left" data-handle="left"></div>
@@ -4098,8 +4116,9 @@ function renderGantt() {
     if (isMonthly) {
       bindMonthlyInputs(draw);
       document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
+        attachBarInteractions(bar, ymsRange, null, draw); // enables right-resize via gb-month-resize
         bar.addEventListener('click', e => {
-          if (e.target.closest('input, .gb-month-cell')) return;
+          if (e.target.closest('input, .gb-month-cell, .gb-month-resize')) return;
           const rec = state.records.find(x => x.id === bar.dataset.id);
           if (rec) openModal(rec);
         });
@@ -4572,6 +4591,11 @@ window.removePerson = async (name) => {
 const modal = document.getElementById('modal');
 
 function openModal(record) {
+  // Reset to hours mode
+  _allocUnit = 'h';
+  document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.dataset.unit === 'h'));
+  document.getElementById('f-hours').step = '0.5';
+
   document.getElementById('modal-title').textContent = record ? 'Editar alocação' : 'Nova alocação';
   document.getElementById('modal-delete').style.display = record ? 'inline-flex' : 'none';
 
@@ -4613,6 +4637,24 @@ document.getElementById('modal-close').onclick = closeModal;
 document.getElementById('modal-cancel').onclick = closeModal;
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
+let _allocUnit = 'h'; // 'h' or 'pm'
+
+function avgCapForPeriod() {
+  const worker = document.getElementById('f-worker').value;
+  const start  = document.getElementById('f-start').value;
+  const end    = document.getElementById('f-end').value;
+  if (!start || !end || start > end) return state.defaultCapacity || 140;
+  const months = ymList(start, end);
+  if (!months.length) return state.defaultCapacity || 140;
+  const total = months.reduce((s, ym) => s + getCapacity(worker, ym), 0);
+  return total / months.length;
+}
+
+function getFormTotalHours() {
+  const v = parseFloat(document.getElementById('f-hours').value) || 0;
+  return _allocUnit === 'pm' ? round2(v * avgCapForPeriod()) : v;
+}
+
 function buildMonthsEditor(existing) {
   const start = document.getElementById('f-start').value;
   const end = document.getElementById('f-end').value;
@@ -4622,7 +4664,7 @@ function buildMonthsEditor(existing) {
     return;
   }
   const yms = ymList(start, end);
-  const totalH = parseFloat(document.getElementById('f-hours').value) || 0;
+  const totalH = getFormTotalHours();
   const perMonth = yms.length > 0 ? totalH / yms.length : 0;
 
   const html = yms.map(ym => {
@@ -4640,7 +4682,7 @@ function buildMonthsEditor(existing) {
 function updateHoursSum() {
   let sum = 0;
   document.querySelectorAll('.month-input').forEach(i => sum += parseFloat(i.value) || 0);
-  const target = parseFloat(document.getElementById('f-hours').value) || 0;
+  const target = getFormTotalHours();
   const badge = document.getElementById('hours-sum');
   badge.textContent = `Σ ${round2(sum)} / ${round2(target)} h`;
   badge.className = 'badge mono ' + (Math.abs(sum - target) < 0.05 ? 'ok' : 'warn');
@@ -4655,6 +4697,25 @@ document.getElementById('btn-redistribute').onclick = () => {
   toast('Distribuição uniformizada');
 };
 
+document.querySelectorAll('.unit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const newUnit = btn.dataset.unit;
+    if (newUnit === _allocUnit) return;
+    const oldV = parseFloat(document.getElementById('f-hours').value) || 0;
+    const cap  = avgCapForPeriod();
+    document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.dataset.unit === newUnit));
+    _allocUnit = newUnit;
+    if (newUnit === 'pm') {
+      document.getElementById('f-hours').value = cap > 0 ? round2(oldV / cap) : 0;
+      document.getElementById('f-hours').step = '0.05';
+    } else {
+      document.getElementById('f-hours').value = round2(oldV * cap);
+      document.getElementById('f-hours').step = '0.5';
+    }
+    buildMonthsEditor(null);
+  });
+});
+
 document.getElementById('form-alloc').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!guardEdit()) return;
@@ -4665,7 +4726,7 @@ document.getElementById('form-alloc').addEventListener('submit', async (e) => {
   const task = document.getElementById('f-task').value.trim();
   const start = document.getElementById('f-start').value;
   const end = document.getElementById('f-end').value;
-  const totalHours = parseFloat(document.getElementById('f-hours').value);
+  const totalHours = getFormTotalHours();
 
   if (!worker || !project || !start || !end || isNaN(totalHours)) {
     toast('Preenche os campos obrigatórios', 'error');
