@@ -2334,7 +2334,7 @@
         </div>
       </div>
       <div style="margin-top:20px">
-        <label style="display:block; margin-bottom:8px">Horas por mês <span id="hours-sum" class="badge mono"></span></label>
+        <label style="display:block; margin-bottom:8px"><span id="months-unit-label">Horas</span> por mês <span id="hours-sum" class="badge mono"></span></label>
         <div class="months-editor" id="months-editor"></div>
       </div>
       <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:24px; padding-top:18px; border-top:1px solid var(--line-soft)">
@@ -4595,6 +4595,7 @@ function openModal(record) {
   _allocUnit = 'h';
   document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.dataset.unit === 'h'));
   document.getElementById('f-hours').step = '0.5';
+  document.getElementById('months-unit-label').textContent = 'Horas';
 
   document.getElementById('modal-title').textContent = record ? 'Editar alocação' : 'Nova alocação';
   document.getElementById('modal-delete').style.display = record ? 'inline-flex' : 'none';
@@ -4664,14 +4665,19 @@ function buildMonthsEditor(existing) {
     return;
   }
   const yms = ymList(start, end);
+  const worker = document.getElementById('f-worker').value;
   const totalH = getFormTotalHours();
   const perMonth = yms.length > 0 ? totalH / yms.length : 0;
+  const isPM = _allocUnit === 'pm';
 
   const html = yms.map(ym => {
-    const v = existing && existing[ym] !== undefined ? existing[ym] : round2(perMonth);
+    const cap = getCapacity(worker, ym);
+    // existing values are always stored in hours; convert to PM for display if needed
+    const hVal = existing && existing[ym] !== undefined ? existing[ym] : round2(perMonth);
+    const v = isPM ? (cap > 0 ? round2(hVal / cap) : 0) : hVal;
     return `<div class="month-cell">
       <label>${ymLabel(ym)}</label>
-      <input type="number" min="0" step="0.5" data-ym="${ym}" value="${v}" class="month-input">
+      <input type="number" min="0" step="${isPM ? '0.05' : '0.5'}" data-ym="${ym}" value="${v}" class="month-input">
     </div>`;
   }).join('');
   document.getElementById('months-editor').innerHTML = html;
@@ -4682,10 +4688,16 @@ function buildMonthsEditor(existing) {
 function updateHoursSum() {
   let sum = 0;
   document.querySelectorAll('.month-input').forEach(i => sum += parseFloat(i.value) || 0);
-  const target = getFormTotalHours();
   const badge = document.getElementById('hours-sum');
-  badge.textContent = `Σ ${round2(sum)} / ${round2(target)} h`;
-  badge.className = 'badge mono ' + (Math.abs(sum - target) < 0.05 ? 'ok' : 'warn');
+  if (_allocUnit === 'pm') {
+    const target = parseFloat(document.getElementById('f-hours').value) || 0;
+    badge.textContent = `Σ ${round2(sum)} / ${round2(target)} PM`;
+    badge.className = 'badge mono ' + (Math.abs(sum - target) < 0.005 ? 'ok' : 'warn');
+  } else {
+    const target = getFormTotalHours();
+    badge.textContent = `Σ ${round2(sum)} / ${round2(target)} h`;
+    badge.className = 'badge mono ' + (Math.abs(sum - target) < 0.05 ? 'ok' : 'warn');
+  }
 }
 
 document.getElementById('f-start').oninput = () => buildMonthsEditor(null);
@@ -4708,9 +4720,11 @@ document.querySelectorAll('.unit-btn').forEach(btn => {
     if (newUnit === 'pm') {
       document.getElementById('f-hours').value = cap > 0 ? round2(oldV / cap) : 0;
       document.getElementById('f-hours').step = '0.05';
+      document.getElementById('months-unit-label').textContent = 'PM';
     } else {
       document.getElementById('f-hours').value = round2(oldV * cap);
       document.getElementById('f-hours').step = '0.5';
+      document.getElementById('months-unit-label').textContent = 'Horas';
     }
     buildMonthsEditor(null);
   });
@@ -4737,7 +4751,12 @@ document.getElementById('form-alloc').addEventListener('submit', async (e) => {
   const monthsHours = {};
   document.querySelectorAll('.month-input').forEach(i => {
     const v = parseFloat(i.value);
-    if (!isNaN(v) && v > 0) monthsHours[i.dataset.ym] = v;
+    if (!isNaN(v) && v > 0) {
+      // cells show PM when in PM mode — convert back to hours for storage
+      monthsHours[i.dataset.ym] = _allocUnit === 'pm'
+        ? round2(v * getCapacity(worker, i.dataset.ym))
+        : v;
+    }
   });
   const realSum = Object.values(monthsHours).reduce((s,v) => s+v, 0);
 

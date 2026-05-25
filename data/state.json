@@ -4007,7 +4007,7 @@
     }
   },
   "config": {
-    "editorInitials": "JSIL",
+    "editorInitials": "jsilva",
     "lastSyncBaseline": {
       "timestamp": "2026-05-25T22:34:12.496Z",
       "recordsById": {
@@ -5426,6 +5426,15 @@
     }
   ],
   "sessions": [
+    {
+      "id": "sess_1779749421559_rxgu",
+      "app_id": "team-planning",
+      "user_initials": "jsilva",
+      "user_name": "João Pedro Silva",
+      "checked_in_at": "2026-05-25T22:50:21.559Z",
+      "checked_out_at": null,
+      "is_active": true
+    },
     {
       "id": "sess_1779747602153_qykh",
       "app_id": "team-planning",
