@@ -1490,6 +1490,13 @@
             </button>
           </div>
           <div class="dm-section">
+            <div class="dm-label">Alocações</div>
+            <button type="button" class="dm-item" id="btn-import-csv">
+              <span>📂 Importar CSV de Alocações</span>
+              <span class="dm-hint">PM por mês · por pessoa/projeto/WP/tarefa</span>
+            </button>
+          </div>
+          <div class="dm-section">
             <div class="dm-label">Arquivo Mensal</div>
             <button type="button" class="dm-item" id="btn-menu-submit-plan">
               <span>↑ Submeter plano do mês</span>
@@ -2343,6 +2350,48 @@
         <button type="submit" class="btn btn-primary">Guardar</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: IMPORTAR CSV DE ALOCAÇÕES ═══════════ -->
+<div class="modal-bg" id="modal-import-csv">
+  <div class="modal" style="max-width:740px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column">
+    <div class="modal-head">
+      <div class="modal-title">📂 Importar Alocações (CSV)</div>
+      <button class="close-btn" id="modal-import-csv-close">×</button>
+    </div>
+    <div style="padding:0 24px 8px; overflow-y:auto; flex:1">
+      <p style="font-size:13px; color:var(--ink-faint); margin:12px 0">
+        Formato esperado: colunas <code>Worker, Project, WP, Task, Month (YYYY-MM), Assignment (PM)</code> — separadas por vírgula ou ponto-e-vírgula.
+      </p>
+      <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px">
+        <label class="btn btn-sm" style="cursor:pointer">
+          Escolher ficheiro .csv
+          <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
+        </label>
+        <span id="csv-file-name" style="font-size:13px; color:var(--ink-faint)">Nenhum ficheiro seleccionado</span>
+      </div>
+      <div id="csv-preview" style="display:none">
+        <div id="csv-preview-stats"></div>
+        <div id="csv-warnings"></div>
+        <div id="csv-preview-table"></div>
+        <div style="margin:14px 0 6px">
+          <label style="font-weight:600; font-size:13px; display:block; margin-bottom:8px">Modo de importação</label>
+          <label style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; cursor:pointer; font-size:13px">
+            <input type="radio" name="csv-mode" value="add" checked style="margin-top:2px">
+            <span><strong>Adicionar</strong> — mantém registos existentes e adiciona os novos</span>
+          </label>
+          <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:13px">
+            <input type="radio" name="csv-mode" value="replace" style="margin-top:2px">
+            <span><strong>Substituir</strong> — remove alocações existentes do mesmo projecto antes de importar</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; justify-content:flex-end; padding:14px 24px; border-top:1px solid var(--line-soft); flex-shrink:0">
+      <button type="button" class="btn" id="csv-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="csv-confirm" disabled>Importar</button>
+    </div>
   </div>
 </div>
 
@@ -6688,6 +6737,159 @@ document.getElementById('btn-clear').onclick = async () => {
   await saveState();
   toast('Alocações removidas');
   renderView(currentView());
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// IMPORTAR CSV DE ALOCAÇÕES
+// ════════════════════════════════════════════════════════════════════════
+let _csvParsed = null;
+
+function _parseAllocCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
+  if (lines.length < 2) throw new Error('Ficheiro vazio ou sem dados');
+  const firstLine = lines[0];
+  const sep = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length - 1 ? ';' : ',';
+  const headers = firstLine.split(sep).map(h => h.trim().replace(/"/g,'').toLowerCase());
+  const ci = k => headers.findIndex(h => h === k || h.includes(k));
+  const iWorker = ci('worker'); const iProject = ci('project');
+  const iWP = ci('wp'); const iTask = ci('task');
+  const iMonth = ci('month'); const iAssign = ci('assignment');
+  if ([iWorker, iProject, iMonth, iAssign].some(i => i < 0))
+    throw new Error('Colunas obrigatórias em falta: worker, project, month, assignment');
+
+  const groups = new Map();
+  const projectsFound = new Set(), workersFound = new Set();
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim(); if (!line) continue;
+    const parts = line.split(sep).map(p => p.trim().replace(/^"|"$/g,''));
+    const worker = parts[iWorker] || ''; const project = parts[iProject] || '';
+    const wp = iWP >= 0 ? (parts[iWP] || '') : '';
+    const task = iTask >= 0 ? (parts[iTask] || '') : '';
+    const month = parts[iMonth] || ''; const assign = parseFloat(parts[iAssign]) || 0;
+    if (!worker || !project || !month || !/^\d{4}-\d{2}$/.test(month)) continue;
+    projectsFound.add(project); workersFound.add(worker);
+    const key = `${worker}||${project}||${wp}||${task}`;
+    if (!groups.has(key)) groups.set(key, { worker, project, wp, task, months: {} });
+    groups.get(key).months[month] = round2((groups.get(key).months[month] || 0) + assign);
+  }
+
+  const warnings = [];
+  const unmatchedWorkers  = new Set([...workersFound].filter(w => !state.workers.includes(w)));
+  const unmatchedProjects = new Set([...projectsFound].filter(p => !state.projects.find(pr => pr.name === p)));
+  if (unmatchedWorkers.size)  warnings.push('Pessoas não encontradas (serão adicionadas): ' + [...unmatchedWorkers].join(', '));
+  if (unmatchedProjects.size) warnings.push('Projectos não encontrados (serão adicionados): ' + [...unmatchedProjects].join(', '));
+  return { groups: [...groups.values()], warnings, projects: projectsFound, workers: workersFound, unmatchedWorkers, unmatchedProjects };
+}
+
+function _csvGroupToRecord(g) {
+  const yms = Object.keys(g.months).sort();
+  const monthsHours = {}; let totalH = 0;
+  for (const ym of yms) {
+    const h = round2(g.months[ym] * getCapacity(g.worker, ym));
+    monthsHours[ym] = h; totalH += h;
+  }
+  return { id: uuid(), team: 'Processos', worker: g.worker, project: g.project,
+    wp: g.wp, task: g.task, start: yms[0], end: yms[yms.length-1],
+    totalHours: round2(totalH), monthsHours, updatedAt: new Date().toISOString() };
+}
+
+function _renderCSVPreview(parsed) {
+  const { groups, warnings, projects, workers } = parsed;
+  document.getElementById('csv-preview').style.display = 'block';
+  const allYMs = groups.flatMap(g => Object.keys(g.months)).sort();
+  const range = allYMs.length ? `${ymLabel(allYMs[0])} → ${ymLabel(allYMs[allYMs.length-1])}` : '—';
+  document.getElementById('csv-preview-stats').innerHTML =
+    `<div style="background:var(--row-alt);border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:13px">
+      <strong>${groups.length}</strong> registos agrupados &nbsp;·&nbsp;
+      Projecto${projects.size>1?'s':''}: <strong>${[...projects].join(', ')}</strong><br>
+      Período: <strong>${range}</strong><br>
+      Pessoas: ${[...workers].join(', ')}
+    </div>`;
+  document.getElementById('csv-warnings').innerHTML = warnings.map(w =>
+    `<div class="warn-note" style="margin-bottom:8px">⚠️ ${w}</div>`).join('');
+  const rows = groups.map(g => {
+    const yms = Object.keys(g.months).sort();
+    const pmTot = round2(Object.values(g.months).reduce((s,v)=>s+v,0));
+    const taskShort = g.task.length > 40 ? g.task.slice(0,39)+'…' : g.task;
+    return `<tr>
+      <td style="font-size:12px;white-space:nowrap">${g.worker}</td>
+      <td style="font-size:11px">${g.wp||'—'}</td>
+      <td style="font-size:11px;max-width:200px" title="${g.task}">${taskShort||'—'}</td>
+      <td style="font-size:11px;white-space:nowrap">${ymLabel(yms[0])} → ${ymLabel(yms[yms.length-1])}</td>
+      <td style="font-size:12px;text-align:right;font-weight:600">${pmTot} PM</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('csv-preview-table').innerHTML =
+    `<div style="overflow-x:auto;max-height:220px;overflow-y:auto;border:1px solid var(--line-soft);border-radius:6px;margin-bottom:14px">
+      <table><thead><tr><th>Pessoa</th><th>WP</th><th>Tarefa</th><th>Período</th><th>PM</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
+
+document.getElementById('btn-import-csv').onclick = () => {
+  document.getElementById('data-menu-panel').classList.remove('show');
+  _csvParsed = null;
+  document.getElementById('csv-file-name').textContent = 'Nenhum ficheiro seleccionado';
+  document.getElementById('csv-preview').style.display = 'none';
+  document.getElementById('csv-confirm').disabled = true;
+  document.getElementById('csv-file-input').value = '';
+  document.getElementById('modal-import-csv').classList.add('active');
+};
+
+document.getElementById('csv-file-input').onchange = (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  document.getElementById('csv-file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      _csvParsed = _parseAllocCSV(ev.target.result);
+      _renderCSVPreview(_csvParsed);
+      document.getElementById('csv-confirm').disabled = _csvParsed.groups.length === 0;
+    } catch (err) {
+      document.getElementById('csv-preview').style.display = 'block';
+      document.getElementById('csv-preview-stats').innerHTML = `<div class="warn-note">❌ ${err.message}</div>`;
+      document.getElementById('csv-warnings').innerHTML = '';
+      document.getElementById('csv-preview-table').innerHTML = '';
+      document.getElementById('csv-confirm').disabled = true;
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+  e.target.value = '';
+};
+
+document.getElementById('csv-cancel').onclick =
+document.getElementById('modal-import-csv-close').onclick = () =>
+  document.getElementById('modal-import-csv').classList.remove('active');
+
+document.getElementById('csv-confirm').onclick = async () => {
+  if (!guardEdit()) return;
+  if (!_csvParsed || !_csvParsed.groups.length) return;
+  const mode = document.querySelector('input[name="csv-mode"]:checked')?.value || 'add';
+  const { groups, unmatchedWorkers, unmatchedProjects } = _csvParsed;
+
+  // Auto-add missing workers and projects
+  for (const w of unmatchedWorkers) state.workers.push(w);
+  for (const p of unmatchedProjects) state.projects.push({ name: p, active: true });
+
+  if (mode === 'replace') {
+    const projectsToReplace = new Set(groups.map(g => g.project));
+    state.records = state.records.filter(r => !projectsToReplace.has(r.project));
+  }
+
+  const newRecords = groups.map(_csvGroupToRecord);
+  state.records.push(...newRecords);
+
+  for (const rec of newRecords) {
+    await logChange('create', 'record', rec.id, `${rec.worker} / ${rec.project}`,
+      `${round2(rec.totalHours)}h · ${rec.start} → ${rec.end} [CSV]`);
+  }
+
+  document.getElementById('modal-import-csv').classList.remove('active');
+  if (unmatchedWorkers.size || unmatchedProjects.size) renderEquipa();
+  renderView(currentView());
+  toast(`${newRecords.length} alocações importadas`);
+
+  const saveResult = await saveState();
+  if (saveResult === 'ok') toast(`${newRecords.length} alocações guardadas no servidor`);
 };
 
 // ════════════════════════════════════════════════════════════════════════
