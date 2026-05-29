@@ -767,16 +767,30 @@ function openModal(record) {
   document.getElementById('modal-title').textContent = record ? 'Editar alocação' : 'Nova alocação';
   document.getElementById('modal-delete').style.display = record ? 'inline-flex' : 'none';
 
-  // populate selects
+  // populate selects — use new Option() to avoid innerHTML encoding issues
   const ws = document.getElementById('f-worker');
-  ws.innerHTML = '<option value="">— Selecionar —</option>' + state.workers.map(w => `<option>${w}</option>`).join('');
+  ws.innerHTML = '';
+  ws.add(new Option('— Selecionar —', ''));
+  state.workers.forEach(w => ws.add(new Option(w, w)));
+
   const ps = document.getElementById('f-project');
-  const allProjs = state.projects.map(p => p.name).sort();
-  ps.innerHTML = '<option value="">— Selecionar —</option>' + allProjs.map(p => `<option ${state.projects.find(x=>x.name===p)?.active===false?'style="color:#aaa"':''}>${p}</option>`).join('');
+  ps.innerHTML = '';
+  ps.add(new Option('— Selecionar —', ''));
+  state.projects.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+    const opt = new Option(p.name, p.name);
+    if (p.active === false) opt.style.color = '#aaa';
+    ps.add(opt);
+  });
 
   if (record) {
     document.getElementById('f-id').value = record.id;
     document.getElementById('f-worker').value = record.worker;
+    // If project was removed from catalog, add it back as an option so it stays visible
+    if (record.project && !ps.querySelector(`option[value="${CSS.escape(record.project)}"]`)) {
+      const orphan = new Option(record.project + ' (removido)', record.project);
+      orphan.style.color = '#aaa';
+      ps.add(orphan);
+    }
     document.getElementById('f-project').value = record.project;
     document.getElementById('f-wp').value = record.wp || '';
     document.getElementById('f-task').value = record.task || '';
