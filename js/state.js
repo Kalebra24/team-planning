@@ -1,4 +1,4 @@
-// ════════════════════════════════════════════════════════════════════════
+﻿// ════════════════════════════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════════════════════════════
 const state = {
@@ -8,6 +8,9 @@ const state = {
   capacity: {},     // {worker: {YYYY-MM: hours}}
   absences: {},     // {worker: {YYYY-MM: {hours, reason}}} — horas deduzidas da capacidade
   defaultCapacity: 140,
+  overloadThreshold: 110, // percentage — cells above this are red
+  warnThreshold: 95,      // percentage — cells between warn and overload are amber
+  riskHorizonMonths: 3,   // months ahead to check for gap risk in dashboard
   lastSyncBaseline: null,  // {timestamp, recordsById: {id: {hash, updatedAt}}} - estado no último sync
   editorInitials: '',      // iniciais do autor (persistente, usadas no nome dos ficheiros)
   planSnapshots: null,     // null = not loaded yet; array once loaded
@@ -166,6 +169,10 @@ async function _saveStateOnce(force = false) {
         editorInitials:   state.editorInitials   || '',
         lastSyncBaseline: state.lastSyncBaseline || null,
         plan_snapshots:   state.planSnapshots    || [],
+        overloadThreshold: state.overloadThreshold ?? 110,
+        warnThreshold:     state.warnThreshold     ?? 95,
+        riskHorizonMonths: state.riskHorizonMonths ?? 3,
+        defaultCapacity:   state.defaultCapacity   ?? 140,
       },
       changelog: (state.changelog || []).slice(0, 200),
       sessions:  (state.sessions  || []).slice(0, 100),
@@ -227,6 +234,10 @@ async function loadState() {
     state.editorInitials   = cfg.editorInitials   || '';
     state.lastSyncBaseline = cfg.lastSyncBaseline || null;
     state.planSnapshots    = cfg.plan_snapshots   || [];
+    state.overloadThreshold = cfg.overloadThreshold ?? 110;
+    state.warnThreshold     = cfg.warnThreshold     ?? 95;
+    state.riskHorizonMonths = cfg.riskHorizonMonths ?? 3;
+    state.defaultCapacity   = cfg.defaultCapacity   ?? 140;
     state.changelog        = data.changelog       || [];
     state.sessions         = data.sessions        || [];
     return true;
@@ -304,6 +315,10 @@ async function saveStateDirect() {
         editorInitials:   state.editorInitials   || '',
         lastSyncBaseline: state.lastSyncBaseline || null,
         plan_snapshots:   state.planSnapshots    || [],
+        overloadThreshold: state.overloadThreshold ?? 110,
+        warnThreshold:     state.warnThreshold     ?? 95,
+        riskHorizonMonths: state.riskHorizonMonths ?? 3,
+        defaultCapacity:   state.defaultCapacity   ?? 140,
       },
       changelog: (state.changelog || []).slice(0, 200),
       sessions:  (state.sessions  || []).slice(0, 100),

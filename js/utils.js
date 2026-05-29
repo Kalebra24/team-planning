@@ -128,3 +128,5 @@ function autoBackup(label) {
 function getAutoBackup() {
   try { return JSON.parse(localStorage.getItem(_AUTO_BACKUP_KEY)); } catch { return null; }
 }
+
+function cfg(key, def) { return state[key] ?? def; }
