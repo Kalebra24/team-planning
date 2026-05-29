@@ -27,9 +27,19 @@ e regista todas as alterações com identificação do autor.
 ## Arquitectura
 
 ```
-index.html  (aplicação completa — HTML + CSS + JS num único ficheiro)
+index.html              (shell HTML — estrutura, modais, tags <link> e <script>)
+css/
+  app.css               (todos os estilos)
+js/
+  utils.js              (helpers de datas, cores, uuid, formatação)
+  state.js              (objecto state, cliente Supabase SB, loadState/saveState)
+  auth.js               (OAuth GitLab PKCE, sessões, logChange, SEED_DATA)
+  views.js              (Dashboard, Alocações, Heatmap, Projetos, Equipa, Arquivo)
+  gantt.js              (Timeline — Gantt arrastável e redimensionável)
+  import-export.js      (Excel, JSON 3-way merge, CSV, Férias, relatório visual)
+  app.js                (routing, toast, sync, wiring de eventos, init)
 supabase_migration.sql  (schema da base de dados)
-.gitlab-ci.yml  (deploy automático para GitLab Pages)
+.gitlab-ci.yml          (deploy automático para GitLab Pages)
 ```
 
 ### Stack
@@ -42,9 +52,9 @@ supabase_migration.sql  (schema da base de dados)
 | Hosting | GitLab Pages (`gitpages.inegi.up.pt`) |
 | CI/CD | GitLab Runner (shell, Windows) |
 
-Não existe servidor de aplicação. O `index.html` é um ficheiro estático; os dados são
-lidos e escritos directamente na base de dados Supabase através da sua REST API,
-usando a *anon key* para leitura/escrita e OAuth do GitLab para identificar o utilizador.
+Não existe servidor de aplicação. Os ficheiros são estáticos; os dados são lidos e
+escritos directamente na base de dados Supabase através da sua REST API, usando a
+*anon key* para leitura/escrita e OAuth do GitLab para identificar o utilizador.
 
 ### Multi-projeto
 
@@ -152,7 +162,8 @@ de conflito (outro utilizador guardou entretanto).
 O ficheiro `.gitlab-ci.yml` configura um pipeline com um único job (`pages`) que:
 1. Copia `index.html` para `public/`
 2. Copia `manifest.json` se existir
-3. Faz upload do artefacto para o GitLab Pages
+3. Copia `css/` e `js/` para `public/`
+4. Faz upload do artefacto para o GitLab Pages
 
 O deploy corre automaticamente em cada push para `main`.
 
