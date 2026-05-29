@@ -2733,16 +2733,25 @@ const SB = {
     }
 
     const nextVersion = state._remoteSha ? parseInt(state._remoteSha, 10) + 1 : 1;
-    const res = await fetch(`${this.url}/rest/v1/${this.table}?on_conflict=project_id`, {
-      method: 'POST',
-      headers: this.headers({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
-      body: JSON.stringify({
-        project_id: this.projectId,
-        data,
-        version: nextVersion,
-        updated_at: new Date().toISOString(),
-      }),
+    const payload = JSON.stringify({
+      data,
+      version: nextVersion,
+      updated_at: new Date().toISOString(),
     });
+
+    // PATCH updates the existing row; POST inserts on first run (no row yet)
+    const rowExists = !!state._remoteSha;
+    const res = rowExists
+      ? await fetch(`${this.url}/rest/v1/${this.table}?project_id=eq.${encodeURIComponent(this.projectId)}`, {
+          method: 'PATCH',
+          headers: this.headers({ 'Prefer': 'return=representation' }),
+          body: payload,
+        })
+      : await fetch(`${this.url}/rest/v1/${this.table}`, {
+          method: 'POST',
+          headers: this.headers({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({ project_id: this.projectId, data, version: nextVersion, updated_at: new Date().toISOString() }),
+        });
 
     if (res.status === 403) {
       throw new Error('[HTTP 403] Permissões insuficientes — verifica a anon key do Supabase.');
