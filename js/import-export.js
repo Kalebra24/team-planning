@@ -34,7 +34,7 @@ function renderTrendChart() {
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
-  const maxPct = Math.max(cfg('overloadThreshold', 110), ...points.map(p => p.pct));
+  const maxPct = Math.max(110, ...points.map(p => p.pct));
   const xStep = chartW / Math.max(points.length - 1, 1);
   const yScale = v => chartH - (v / maxPct) * chartH;
 
@@ -57,8 +57,8 @@ function renderTrendChart() {
   const linePath = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
   const areaPath = `${linePath} L${pts[pts.length-1][0]},${PAD.top + chartH} L${pts[0][0]},${PAD.top + chartH} Z`;
 
-  // Danger zone (>overload threshold)
-  const dangerY = PAD.top + yScale(cfg('overloadThreshold', 110));
+  // Danger zone (>110%)
+  const dangerY = PAD.top + yScale(110);
   const dangerFill = `<rect x="${PAD.left}" y="${PAD.top}" width="${chartW}" height="${Math.max(0, dangerY - PAD.top)}" fill="rgba(163,45,31,0.05)"/>`;
 
   // X labels
@@ -70,7 +70,7 @@ function renderTrendChart() {
   // Dots
   const dots = pts.map((p, i) => {
     const pct = points[i].pct;
-    const color = pct > cfg('overloadThreshold', 110) ? 'var(--danger)' : pct > cfg('warnThreshold', 95) ? 'var(--warn)' : 'var(--ok)';
+    const color = pct > 110 ? 'var(--danger)' : pct > 95 ? 'var(--warn)' : 'var(--ok)';
     return `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${color}" stroke="white" stroke-width="1.5" data-i="${i}" class="trend-dot"/>`;
   }).join('');
 
@@ -178,7 +178,7 @@ function exportMonthlyReport() {
   let overMths = 0;
   for (const w of state.workers)
     for (const ym of yms)
-      if (util[w][ym].pct > cfg('overloadThreshold', 110) / 100) overMths++;
+      if (util[w][ym].pct > 1.10) overMths++;
 
   // ── Projectos × Pessoa (ano) ─────────────────────────────────────
   const projs = [...new Set(
@@ -198,10 +198,9 @@ function exportMonthlyReport() {
   const maxProjH   = Math.max(...Object.values(projTot), 1);
 
   // ── Helpers de cor ───────────────────────────────────────────────
-  const _over = cfg('overloadThreshold', 110) / 100; const _warn = cfg('warnThreshold', 95) / 100;
-  const hc = p => p === 0 ? '#eceae3' : p < 0.26 ? '#d4eadb' : p < 0.76 ? '#a8d5b0' : p < _warn ? '#45b36b' : p <= _over ? '#f0a500' : '#e53e3e';
+  const hc = p => p === 0 ? '#eceae3' : p < 0.26 ? '#d4eadb' : p < 0.76 ? '#a8d5b0' : p < 0.96 ? '#45b36b' : p <= 1.10 ? '#f0a500' : '#e53e3e';
   const tc = p => p >= 0.76 ? '#fff' : '#1a1917';
-  const kpiColor = p => p >= _over ? '#e53e3e' : p >= _warn ? '#c07000' : p >= 0.76 ? '#2d7a4a' : '#555';
+  const kpiColor = p => p >= 1.10 ? '#e53e3e' : p >= 0.96 ? '#c07000' : p >= 0.76 ? '#2d7a4a' : '#555';
 
   // ── HTML — Secção 1: barras de utilização ────────────────────────
   const barsHTML = state.workers.map(w => {

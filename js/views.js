@@ -44,16 +44,14 @@ function renderDashboard() {
     }
   }
 
-  // Overallocations
-  const overFrac = cfg('overloadThreshold', 110) / 100;
-  const warnFrac = cfg('warnThreshold', 95) / 100;
+  // Overallocations >110%
   let overCount = 0;
   const overDetails = [];
   for (const [w, months] of Object.entries(utilByMonth)) {
     for (const [ym, hours] of Object.entries(months)) {
       const cap = getCapacity(w, ym);
       const pct = cap > 0 ? hours / cap : 0;
-      if (pct > overFrac) { overCount++; overDetails.push({w, ym, pct, hours, cap}); }
+      if (pct > 1.10) { overCount++; overDetails.push({w, ym, pct, hours, cap}); }
     }
   }
 
@@ -67,10 +65,9 @@ function renderDashboard() {
   const avgUtil = utilCount > 0 ? Math.round(totalUtil / utilCount * 100) : 0;
   const utilCls = avgUtil > 105 ? 'danger' : avgUtil > 90 ? 'warn' : avgUtil > 30 ? 'ok' : '';
 
-  // Stat 2: gap risk — people with <20% in next N months
-  const riskHorizon = cfg('riskHorizonMonths', 3);
+  // Stat 2: gap risk — people with <20% in any of next 3 months
   const next3 = [];
-  for (let i = 1; i <= riskHorizon; i++) {
+  for (let i = 1; i <= 3; i++) {
     let mm = now.getMonth() + 1 + i, yy = now.getFullYear();
     if (mm > 12) { mm -= 12; yy++; }
     next3.push(ymKey(yy, mm));
@@ -103,7 +100,7 @@ function renderDashboard() {
       <div class="stat-sub">de ${state.projects.length} no catálogo</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Sobrealocações &gt;${cfg('overloadThreshold', 110)}%</div>
+      <div class="stat-label">Sobrealocações &gt;110%</div>
       <div class="stat-value ${overCount > 0 ? 'danger' : 'ok'}">${overCount}</div>
       <div class="stat-sub">meses · ${new Set(overDetails.map(d => d.w)).size} pessoa(s)</div>
     </div>
@@ -214,7 +211,7 @@ function renderBarChart(year, month = 0) {
   }
   container.innerHTML = rows.map(r => {
     const width = Math.min(r.pct * 100, 130);
-    const cls = r.pct > overFrac ? 'danger' : r.pct > warnFrac ? 'warn' : '';
+    const cls = r.pct > 1.05 ? 'danger' : r.pct > 0.90 ? 'warn' : '';
     return `
       <div class="bar-row">
         <div class="bar-name">${r.worker}</div>
@@ -330,14 +327,12 @@ function renderHeatmap() {
     }
 
     function levelFor(pct) {
-      const over = cfg('overloadThreshold', 110) / 100;
-      const warn = cfg('warnThreshold', 95) / 100;
       if (pct === 0) return 'empty';
       if (pct <= 0.25) return 'lvl-0';
       if (pct <= 0.75) return 'lvl-1';
-      if (pct <= warn) return 'lvl-2';
-      if (pct <= over) return 'lvl-3';
-      if (pct <= over + 0.20) return 'lvl-4';
+      if (pct <= 0.95) return 'lvl-2';
+      if (pct <= 1.10) return 'lvl-3';
+      if (pct <= 1.30) return 'lvl-4';
       return 'lvl-5';
     }
 
@@ -646,8 +641,6 @@ function renderEquipa() {
       yearSel.value = years.includes(now) ? now : (years.find(y => y >= now) || years[years.length - 1] || now);
     }
   }
-  const capSub = document.getElementById('cap-sub');
-  if (capSub) capSub.textContent = "Edita diretamente · vazio = ${cfg('defaultCapacity', 140)}h default";
   const drawCap = () => {
     const year = parseInt(yearSel.value);
     let html = '<table class="data"><thead><tr><th>Pessoa</th>';
@@ -719,24 +712,12 @@ function renderEquipa() {
   drawCap();
   yearSel.onchange = drawCap;
   renderAbsences();
-
-  // Populate settings inputs
-  const cfgInputs = {
-    'cfg-overload':  cfg('overloadThreshold', 110),
-    'cfg-warn':      cfg('warnThreshold', 95),
-    'cfg-risk':      cfg('riskHorizonMonths', 3),
-    'cfg-capacity':  cfg('defaultCapacity', 140),
-  };
-  for (const [id, val] of Object.entries(cfgInputs)) {
-    const el = document.getElementById(id);
-    if (el) el.value = val;
-  }
 }
 
 document.getElementById('btn-add-person').onclick = async () => {
   if (!guardEdit()) return;
   const name = document.getElementById('new-person-name').value.trim();
-  const cap = parseFloat(document.getElementById('new-person-cap').value) || cfg('defaultCapacity', 140);
+  const cap = parseFloat(document.getElementById('new-person-cap').value) || 140;
   if (!name) { toast('Indica um nome', 'error'); return; }
   if (state.workers.includes(name)) { toast('Pessoa já existe', 'error'); return; }
   state.workers.push(name);
@@ -771,29 +752,6 @@ window.removePerson = async (name) => {
   document.getElementById('filter-worker').innerHTML = '<option value="">Todas as pessoas</option>';
 };
 
-
-// ════════════════════════════════════════════════════════════════════════
-// CONFIGURACOES DE PLANEAMENTO
-// ════════════════════════════════════════════════════════════════════════
-window.saveSettings = async () => {
-  if (!guardEdit()) return;
-  const overload  = parseInt(document.getElementById('cfg-overload').value);
-  const warn      = parseInt(document.getElementById('cfg-warn').value);
-  const risk      = parseInt(document.getElementById('cfg-risk').value);
-  const capacity  = parseFloat(document.getElementById('cfg-capacity').value);
-  if (isNaN(overload) || overload < 100 || overload > 300) { toast('Limiar de sobrealocacao invalido (100-300)', 'error'); return; }
-  if (isNaN(warn) || warn < 50 || warn >= overload)        { toast('Limiar de atencao invalido (50 a ' + (overload-1) + ')', 'error'); return; }
-  if (isNaN(risk) || risk < 1 || risk > 24)                { toast('Horizonte de risco invalido (1-24 meses)', 'error'); return; }
-  if (isNaN(capacity) || capacity <= 0)                    { toast('Capacidade padrao invalida', 'error'); return; }
-  state.overloadThreshold = overload;
-  state.warnThreshold     = warn;
-  state.riskHorizonMonths = risk;
-  state.defaultCapacity   = capacity;
-  await saveState();
-  toast('Configuracoes guardadas');
-  // Re-render current view so thresholds take effect immediately
-  renderView(currentView());
-};
 // ════════════════════════════════════════════════════════════════════════
 // MODAL: NOVA / EDITAR
 // ════════════════════════════════════════════════════════════════════════
@@ -869,9 +827,9 @@ function avgCapForPeriod() {
   const worker = document.getElementById('f-worker').value;
   const start  = document.getElementById('f-start').value;
   const end    = document.getElementById('f-end').value;
-  if (!start || !end || start > end) return cfg('defaultCapacity', 140);
+  if (!start || !end || start > end) return state.defaultCapacity || 140;
   const months = ymList(start, end);
-  if (!months.length) return cfg('defaultCapacity', 140);
+  if (!months.length) return state.defaultCapacity || 140;
   const total = months.reduce((s, ym) => s + getCapacity(worker, ym), 0);
   return total / months.length;
 }

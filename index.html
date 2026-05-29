@@ -372,7 +372,7 @@
       <div class="card-head">
         <div>
           <div class="card-title">Capacidade mensal por pessoa</div>
-          <div class="card-sub" id="cap-sub">Edita diretamente · vazio = 140h default</div>
+          <div class="card-sub">Edita diretamente · vazio = 140h default</div>
         </div>
         <select id="cap-year"></select>
       </div>
@@ -406,38 +406,6 @@
         <button class="btn btn-primary" style="align-self:flex-end" onclick="addAbsence()">+ Registar</button>
       </div>
       <div id="abs-list" class="absence-grid"></div>
-    </div>
-
-    <div class="card" id="planning-settings-card">
-      <div class="card-head">
-        <div>
-          <div class="card-title">Configurações de Planeamento</div>
-          <div class="card-sub">Limiares e valores por omissão usados em todos os cálculos e vistas</div>
-        </div>
-      </div>
-      <div class="settings-grid">
-        <div class="field">
-          <label>Limiar de sobrealocação (%)</label>
-          <input type="number" id="cfg-overload" min="100" max="200" step="1" placeholder="110">
-          <div class="field-hint">Acima deste valor a célula fica vermelha (dashboard, heatmap, timeline)</div>
-        </div>
-        <div class="field">
-          <label>Limiar de atenção (%)</label>
-          <input type="number" id="cfg-warn" min="50" max="100" step="1" placeholder="95">
-          <div class="field-hint">Entre atenção e sobrealocação — cor âmbar</div>
-        </div>
-        <div class="field">
-          <label>Horizonte de risco (meses)</label>
-          <input type="number" id="cfg-risk" min="1" max="12" step="1" placeholder="3">
-          <div class="field-hint">Pessoas sem alocação neste horizonte são sinalizadas no dashboard</div>
-        </div>
-        <div class="field">
-          <label>Capacidade padrão (h/mês)</label>
-          <input type="number" id="cfg-capacity" min="1" max="400" step="1" placeholder="140">
-          <div class="field-hint">Valor assumido quando a célula de capacidade está vazia</div>
-        </div>
-      </div>
-      <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="saveSettings()">Guardar configurações</button>
     </div>
   </section>
 
