@@ -2733,7 +2733,7 @@ const SB = {
     }
 
     const nextVersion = state._remoteSha ? parseInt(state._remoteSha, 10) + 1 : 1;
-    const res = await fetch(`${this.url}/rest/v1/${this.table}`, {
+    const res = await fetch(`${this.url}/rest/v1/${this.table}?on_conflict=project_id`, {
       method: 'POST',
       headers: this.headers({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
       body: JSON.stringify({
