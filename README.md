@@ -28,8 +28,7 @@ e regista todas as alterações com identificação do autor.
 
 ```
 index.html  (aplicação completa — HTML + CSS + JS num único ficheiro)
-data/
-  state.json  (base de dados da aplicação — lida/escrita via GitLab API)
+supabase_migration.sql  (schema da base de dados)
 .gitlab-ci.yml  (deploy automático para GitLab Pages)
 ```
 
@@ -38,14 +37,20 @@ data/
 | Componente | Tecnologia |
 |---|---|
 | Frontend | HTML / CSS / JavaScript vanilla |
-| Persistência | GitLab Repository Files API (`data/state.json`) |
+| Persistência | Supabase (PostgreSQL) via REST API |
 | Autenticação | GitLab OAuth 2.0 com PKCE |
 | Hosting | GitLab Pages (`gitpages.inegi.up.pt`) |
 | CI/CD | GitLab Runner (shell, Windows) |
 
 Não existe servidor de aplicação. O `index.html` é um ficheiro estático; os dados são
-lidos e escritos directamente no repositório através da GitLab API, usando um
-*project access token* para leitura/escrita e OAuth para identificar o utilizador.
+lidos e escritos directamente na base de dados Supabase através da sua REST API,
+usando a *anon key* para leitura/escrita e OAuth do GitLab para identificar o utilizador.
+
+### Multi-projeto
+
+A tabela `app_state` tem uma coluna `project_id` que isola os dados de diferentes
+aplicações na mesma base de dados Supabase. Para reutilizar a base de dados noutro
+projecto basta alterar o valor de `SB.projectId` no `index.html`.
 
 ---
 
@@ -85,7 +90,19 @@ o valor líquido é guardado directamente em `state.capacity[pessoa][YYYY-MM]`.
 
 ---
 
-## Estrutura do `data/state.json`
+## Estrutura de dados (Supabase)
+
+### Tabela `app_state`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID | Chave primária |
+| `project_id` | TEXT UNIQUE | Identificador da aplicação (ex: `team-planning-processos`) |
+| `data` | JSONB | Estado completo da aplicação |
+| `version` | BIGINT | Incrementado em cada escrita — usado para detecção de conflitos |
+| `updated_at` | TIMESTAMPTZ | Data/hora da última escrita |
+
+### Estrutura do campo `data`
 
 ```json
 {
@@ -107,11 +124,34 @@ o valor líquido é guardado directamente em `state.capacity[pessoa][YYYY-MM]`.
 
 ---
 
+## Supabase
+
+### Credenciais
+
+| Parâmetro | Valor |
+|---|---|
+| Project URL | `https://milzbgsbxshfhkyxkpvt.supabase.co` |
+| Anon Key | ver `SB.anonKey` em `index.html` |
+| Tabela | `app_state` |
+| project_id | `team-planning-processos` |
+
+### Criar a tabela (primeira vez)
+
+Corre o ficheiro `supabase_migration.sql` no **SQL Editor** do Supabase Dashboard.
+
+### Detecção de conflitos
+
+A escrita usa `PATCH` para actualizar a linha existente. Antes de cada escrita é verificado
+se a `version` remota coincide com a que foi lida — se não coincidir, é mostrado um diálogo
+de conflito (outro utilizador guardou entretanto).
+
+---
+
 ## CI/CD — Deploy automático
 
 O ficheiro `.gitlab-ci.yml` configura um pipeline com um único job (`pages`) que:
 1. Copia `index.html` para `public/`
-2. Copia `manifest.json` e `data/state.json` se existirem
+2. Copia `manifest.json` se existir
 3. Faz upload do artefacto para o GitLab Pages
 
 O deploy corre automaticamente em cada push para `main`.
@@ -151,22 +191,8 @@ A aplicação usa **GitLab OAuth 2.0 com PKCE** (sem segredo de cliente, adequad
 
 O token OAuth é guardado no `localStorage` do browser e refrescado automaticamente.
 A identidade do utilizador (username GitLab) é verificada via `/api/v4/user` —
-não pode ser forjada. O OAuth serve **apenas para identificação** — as escritas no
-repositório usam o Project Access Token.
-
----
-
-## Acesso à API GitLab
-
-A leitura e escrita do `data/state.json` usa um **Project Access Token** com scope `api`,
-hardcoded no `index.html` (equivalente à *anon key* do Supabase — visível no source,
-mas com acesso limitado a este projecto).
-
-Para regenerar o token:
-1. Vai a **Settings → Access Tokens** no projecto GitLab
-2. Revoga o token existente (`app-token`)
-3. Cria novo com role **Developer** e scope **`api`**
-4. Substitui o valor em `GL.token` no `index.html` e faz push
+não pode ser forjada. O OAuth serve **apenas para identificação** — as escritas na
+base de dados usam a anon key do Supabase.
 
 ---
 
