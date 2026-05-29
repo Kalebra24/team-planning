@@ -969,6 +969,41 @@
   </div>
 </div>
 
+<!-- modal report options -->
+<div class="modal-bg" id="modal-report">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-head">
+      <div class="modal-title">📊 Gerar Relatório Visual</div>
+      <button class="close-btn" id="modal-report-close">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px;padding-top:4px">
+      <div class="field">
+        <label>Ano</label>
+        <select id="rpt-year" style="width:110px"></select>
+      </div>
+      <div class="field">
+        <label>Projecto <span style="font-size:11px;color:var(--ink-faint)">(opcional)</span></label>
+        <select id="rpt-project" style="width:100%"></select>
+      </div>
+      <div class="field">
+        <label>Nível de detalhe</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer">
+            <input type="radio" name="rpt-level" value="full" checked> Completo — 3 páginas (resumo, heatmap, projectos)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer">
+            <input type="radio" name="rpt-level" value="exec"> Executivo — 1 página (resumo + tendência)
+          </label>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--line-soft)">
+      <button type="button" class="btn" id="modal-report-cancel">Cancelar</button>
+      <button type="button" class="btn btn-accent" id="btn-report-generate">Gerar relatório →</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="js/utils.js"></script>

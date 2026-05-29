@@ -137,262 +137,326 @@ window.exportGanttPNG = () => {
 // ════════════════════════════════════════════════════════════════════════
 // RELATÓRIO VISUAL (#9)
 // ════════════════════════════════════════════════════════════════════════
-function exportMonthlyReport() {
-  const now      = new Date();
-  const allYears = getAllYears();
-  const curYear  = allYears.includes(now.getFullYear()) ? now.getFullYear()
-                 : (allYears[allYears.length - 1] || now.getFullYear());
-  const curM     = now.getMonth() + 1;
-  const curYM    = ymKey(curYear, curM);
-  const yms      = Array.from({length: 12}, (_, i) => ymKey(curYear, i + 1));
-  const ML       = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-  // ── Utilização por pessoa × mês ──────────────────────────────────
+function openReportModal() {
+  const yearSel = document.getElementById('rpt-year');
+  yearSel.innerHTML = '';
+  const curY = new Date().getFullYear();
+  const years = getAllYears().length ? getAllYears() : [curY];
+  years.slice().reverse().forEach(y => {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    if (y === curY) o.selected = true;
+    yearSel.appendChild(o);
+  });
+  const projSel = document.getElementById('rpt-project');
+  projSel.innerHTML = '<option value="">Todos os projectos</option>';
+  [...state.projects].sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.name; o.textContent = p.name;
+    projSel.appendChild(o);
+  });
+  document.getElementById('modal-report').classList.add('active');
+}
+
+function exportMonthlyReport({ year, filterProject = '', fullReport = true } = {}) {
+  const now    = new Date();
+  const curY   = year || now.getFullYear();
+  const ML     = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const yms    = Array.from({length: 12}, (_, i) => ymKey(curY, i + 1));
+  const curM   = now.getMonth() + 1;
+  const curYM  = ymKey(now.getFullYear(), curM);
+
+  // Filter records by project
+  const records = filterProject
+    ? state.records.filter(r => r.project === filterProject)
+    : state.records;
+
+  // Utilization per person x month
   const util = {};
   for (const w of state.workers) {
     util[w] = {};
     for (const ym of yms) {
       const cap   = getCapacity(w, ym);
-      const alloc = state.records.reduce((s, r) => r.worker === w ? s + (r.monthsHours?.[ym] || 0) : s, 0);
+      const alloc = records.reduce((s, r) => r.worker === w ? s + (r.monthsHours?.[ym] || 0) : s, 0);
       util[w][ym] = { cap, alloc, pct: cap > 0 ? alloc / cap : 0 };
     }
   }
 
-  // ── KPIs ─────────────────────────────────────────────────────────
-  const withCap = state.workers.filter(w => util[w][curYM].cap > 0);
+  // KPIs
+  const refYM   = yms.includes(curYM) ? curYM : yms[0];
+  const withCap = state.workers.filter(w => util[w][refYM].cap > 0);
   const avgUtil = withCap.length
-    ? Math.round(withCap.reduce((s, w) => s + util[w][curYM].pct, 0) / withCap.length * 100) : 0;
+    ? Math.round(withCap.reduce((s, w) => s + util[w][refYM].pct, 0) / withCap.length * 100) : 0;
 
   let atRisk = 0;
   for (const w of state.workers) {
     let hasWork = false;
     for (let i = 1; i <= 3; i++) {
-      const fm = ((curM - 1 + i) % 12) + 1;
-      const fy = curYear + Math.floor((curM - 1 + i) / 12);
-      if (state.records.some(r => r.worker === w && (r.monthsHours?.[ymKey(fy, fm)] || 0) > 0)) {
-        hasWork = true; break;
-      }
+      const nxt = ymAddMonths(curYM, i);
+      if (records.some(r => r.worker === w && (r.monthsHours?.[nxt] || 0) > 0)) { hasWork = true; break; }
     }
     if (!hasWork) atRisk++;
   }
+
   let overMths = 0;
   for (const w of state.workers)
     for (const ym of yms)
       if (util[w][ym].pct > 1.10) overMths++;
 
-  // ── Projectos × Pessoa (ano) ─────────────────────────────────────
+  // Project matrix
   const projs = [...new Set(
-    state.records.filter(r => yms.some(ym => (r.monthsHours?.[ym] || 0) > 0)).map(r => r.project)
+    records.filter(r => yms.some(ym => (r.monthsHours?.[ym] || 0) > 0)).map(r => r.project)
   )].sort();
   const projH = {};
   for (const w of state.workers) projH[w] = {};
-  for (const r of state.records) {
+  for (const r of records) {
     const h = yms.reduce((s, ym) => s + (r.monthsHours?.[ym] || 0), 0);
     if (h > 0) projH[r.worker][r.project] = (projH[r.worker][r.project] || 0) + h;
   }
-  const projTot   = {};
+  const projTot    = {};
   for (const p of projs) projTot[p] = state.workers.reduce((s, w) => s + (projH[w]?.[p] || 0), 0);
-  const workerTot = {};
+  const workerTot  = {};
   for (const w of state.workers) workerTot[w] = projs.reduce((s, p) => s + (projH[w]?.[p] || 0), 0);
   const grandTotal = projs.reduce((s, p) => s + projTot[p], 0);
   const maxProjH   = Math.max(...Object.values(projTot), 1);
 
-  // ── Helpers de cor ───────────────────────────────────────────────
-  const hc = p => p === 0 ? '#eceae3' : p < 0.26 ? '#d4eadb' : p < 0.76 ? '#a8d5b0' : p < 0.96 ? '#45b36b' : p <= 1.10 ? '#f0a500' : '#e53e3e';
+  // Color helpers — INEGI brand
+  const hc = p => p === 0 ? '#f2f0eb'
+    : p < 0.26  ? '#d4eadb'
+    : p < 0.76  ? '#a3c8ad'
+    : p < 0.96  ? '#4a8f5e'
+    : p <= 1.10 ? '#d97c10'
+    : '#8B2638';
   const tc = p => p >= 0.76 ? '#fff' : '#1a1917';
-  const kpiColor = p => p >= 1.10 ? '#e53e3e' : p >= 0.96 ? '#c07000' : p >= 0.76 ? '#2d7a4a' : '#555';
+  const kpiColor = p => p >= 1.10 ? '#8B2638' : p >= 0.96 ? '#d97c10' : p >= 0.76 ? '#2d7a4a' : '#444';
 
-  // ── HTML — Secção 1: barras de utilização ────────────────────────
+  // Trend SVG: demand vs capacity — next 12 months from today
+  const trendYMs  = Array.from({length: 12}, (_, i) => ymAddMonths(curYM, i));
+  const tDemand   = trendYMs.map(ym => records.reduce((s, r) => s + (r.monthsHours?.[ym] || 0), 0));
+  const tCapacity = trendYMs.map(ym => state.workers.reduce((s, w) => s + getCapacity(w, ym), 0));
+  const tMax      = Math.max(1, ...tDemand, ...tCapacity);
+  const TW = 560, TH = 150;
+  const TP = { top: 18, right: 16, bottom: 32, left: 46 };
+  const tcW = TW - TP.left - TP.right;
+  const tcH = TH - TP.top - TP.bottom;
+  const txStep  = tcW / Math.max(trendYMs.length - 1, 1);
+  const tyScale = v => tcH * (1 - v / (tMax * 1.05));
+  const dPts = tDemand.map((v, i)   => [TP.left + i * txStep, TP.top + tyScale(v)]);
+  const cPts = tCapacity.map((v, i) => [TP.left + i * txStep, TP.top + tyScale(v)]);
+  const svgPath = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const gridStep = Math.ceil(tMax * 1.05 / 4 / 50) * 50 || 100;
+  let tGrid = '';
+  for (let v = 0; v <= tMax * 1.1; v += gridStep) {
+    const gy = TP.top + tyScale(v);
+    if (gy < TP.top) break;
+    tGrid += '<line x1="' + TP.left + '" x2="' + (TW - TP.right) + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#e8e4dc" stroke-width="1"/>';
+    tGrid += '<text x="' + (TP.left - 4) + '" y="' + (gy + 3.5).toFixed(1) + '" text-anchor="end" font-size="8.5" fill="#8C8E8F">' + Math.round(v) + 'h</text>';
+  }
+  const tLabels = trendYMs.map((ym, i) => {
+    const parsed = ymParse(ym);
+    const ml = ML[parsed.m - 1];
+    const x  = (TP.left + i * txStep).toFixed(1);
+    const showYear = parsed.m === 1 || i === 0;
+    return (i % 2 === 0) ? '<text x="' + x + '" y="' + (TH - 4) + '" text-anchor="middle" font-size="8.5" fill="#8C8E8F">' + ml + (showYear ? ' \'' + String(parsed.y).slice(2) : '') + '</text>' : '';
+  }).join('');
+  const trendSVG = '<svg viewBox="0 0 ' + TW + ' ' + TH + '" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:' + TW + 'px;height:auto">'
+    + tGrid
+    + '<path d="' + svgPath(cPts) + '" fill="none" stroke="#8C8E8F" stroke-width="1.5" stroke-dasharray="5,4"/>'
+    + '<path d="' + svgPath(dPts) + '" fill="none" stroke="#8B2638" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    + dPts.map(p => '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3" fill="#8B2638"/>').join('')
+    + tLabels
+    + '<rect x="' + (TP.left + 4) + '" y="' + (TP.top + 4) + '" width="70" height="16" fill="white" opacity="0.85" rx="2"/>'
+    + '<line x1="' + (TP.left + 7) + '" x2="' + (TP.left + 18) + '" y1="' + (TP.top + 12) + '" y2="' + (TP.top + 12) + '" stroke="#8B2638" stroke-width="2"/>'
+    + '<text x="' + (TP.left + 21) + '" y="' + (TP.top + 15) + '" font-size="8" fill="#8B2638" font-weight="600">Procura</text>'
+    + '<line x1="' + (TP.left + 40) + '" x2="' + (TP.left + 51) + '" y1="' + (TP.top + 12) + '" y2="' + (TP.top + 12) + '" stroke="#8C8E8F" stroke-width="1.5" stroke-dasharray="4,3"/>'
+    + '<text x="' + (TP.left + 54) + '" y="' + (TP.top + 15) + '" font-size="8" fill="#8C8E8F">Cap.</text>'
+    + '</svg>';
+
+  // Metadata
+  const genDate = now.toLocaleDateString('pt-PT', {day:'2-digit', month:'long', year:'numeric'});
+  const genTime = now.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'});
+  const genUser = (typeof sessionCtx !== 'undefined' && sessionCtx)
+    ? (sessionCtx.displayName || sessionCtx.initials || '—') : '—';
+  const periodLbl = 'Jan – Dez ' + curY;
+
+  // INEGI logo (inline SVG)
+  const logoSVG = '<svg width="108" height="40" viewBox="0 0 108 40" xmlns="http://www.w3.org/2000/svg">'
+    + '<rect width="5" height="40" fill="#8B2638"/>'
+    + '<text x="12" y="26" font-family="\'DIN Next LT Pro\',\'Segoe UI\',Arial,sans-serif" font-size="21" font-weight="800" fill="#8B2638" letter-spacing="-0.3">INEGI</text>'
+    + '<text x="12" y="37" font-family="\'Segoe UI\',Arial,sans-serif" font-size="5.8" fill="#8C8E8F" letter-spacing="0.09em">INSTITUTO · ENGENHARIA</text>'
+    + '</svg>';
+
+  // Page header helper
+  const pageHeader = (title) => ''
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #8B2638;padding-bottom:10px;margin-bottom:18px">'
+    + '<div style="display:flex;align-items:center;gap:14px">'
+    + logoSVG
+    + '<div><div style="font-size:14.5px;font-weight:800;color:#1a1917;letter-spacing:-0.3px">' + title + '</div>'
+    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">' + (filterProject ? 'Projecto: ' + filterProject : 'Todos os projectos') + ' &nbsp;·&nbsp; ' + curY + '</div></div></div>'
+    + '<div style="text-align:right;font-size:9px;color:#8C8E8F;line-height:1.75">'
+    + '<div>Gerado por <strong style="color:#444">' + genUser + '</strong></div>'
+    + '<div>' + genDate + ', ' + genTime + '</div>'
+    + '<div>Período: ' + periodLbl + '</div>'
+    + '</div></div>';
+
+  // Section heading helper
+  const h2 = label => '<div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:#8C8E8F;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e8e4dc">' + label + '</div>';
+
+  // KPI card helper
+  const kpiCard = (label, value, sub, color) => '<div style="background:#f6f3ec;border-radius:8px;padding:13px;border-top:3px solid ' + color + '">'
+    + '<div style="font-size:7.5px;text-transform:uppercase;letter-spacing:.1em;color:#8C8E8F;font-weight:700;margin-bottom:5px">' + label + '</div>'
+    + '<div style="font-size:27px;font-weight:900;color:' + color + ';line-height:1">' + value + '</div>'
+    + '<div style="font-size:9px;color:#aaa;margin-top:4px">' + sub + '</div>'
+    + '</div>';
+
+  // Utilization bars
+  const refLabel = ML[ymParse(refYM).m - 1] + ' ' + ymParse(refYM).y;
   const barsHTML = state.workers.map(w => {
-    const d = util[w][curYM];
-    const barW = Math.min(100, Math.round(d.pct * 100));
-    const label = d.cap > 0 ? `${Math.round(d.pct * 100)}%  ·  ${Math.round(d.alloc)}h / ${d.cap}h` : '—';
-    return `<tr>
-      <td style="width:160px;padding:5px 12px 5px 0;font-size:12px;font-weight:500;white-space:nowrap">${w}</td>
-      <td style="padding:5px 0">
-        <div style="position:relative;height:22px;background:#eceae3;border-radius:4px;overflow:visible">
-          <div style="position:absolute;left:0;top:0;height:100%;width:${barW}%;background:${hc(d.pct)};border-radius:4px;min-width:${d.alloc > 0 ? 2 : 0}px"></div>
-          ${d.pct > 1 ? `<div style="position:absolute;left:100%;top:0;height:100%;width:${Math.min(30, Math.round((d.pct - 1) * 100))}%;background:#e53e3e;opacity:0.6;border-radius:0 4px 4px 0"></div>` : ''}
-        </div>
-      </td>
-      <td style="width:150px;padding:5px 0 5px 12px;font-size:11px;color:#555;white-space:nowrap;font-family:'Courier New',monospace">${label}</td>
-    </tr>`;
+    const d    = util[w][refYM];
+    const pct  = Math.round(d.pct * 100);
+    const barW = Math.min(100, pct);
+    const lbl  = d.cap > 0 ? pct + '%  ·  ' + Math.round(d.alloc) + 'h / ' + d.cap + 'h' : '—';
+    const vac  = state.absences?.[w]?.[refYM] ? ' <span title="Férias" style="font-size:10px">✈</span>' : '';
+    return '<tr>'
+      + '<td style="width:140px;padding:4px 10px 4px 0;font-size:11.5px;font-weight:500;white-space:nowrap">' + w + vac + '</td>'
+      + '<td style="padding:4px 0"><div style="position:relative;height:20px;background:#f2f0eb;border-radius:3px">'
+      + '<div style="position:absolute;left:0;top:0;height:100%;width:' + barW + '%;background:' + hc(d.pct) + ';border-radius:3px;min-width:' + (d.alloc > 0 ? 2 : 0) + 'px"></div>'
+      + (d.pct > 1 ? '<div style="position:absolute;left:100%;top:0;height:100%;width:' + Math.min(20, Math.round((d.pct - 1) * 100)) + '%;background:#8B2638;opacity:.45;border-radius:0 3px 3px 0"></div>' : '')
+      + '</div></td>'
+      + '<td style="width:160px;padding:4px 0 4px 10px;font-size:10px;color:#666;white-space:nowrap;font-family:\'Courier New\',monospace">' + lbl + '</td>'
+      + '</tr>';
   }).join('');
 
-  // ── HTML — Secção 2: heatmap ─────────────────────────────────────
-  const hmHead = ML.map(m => `<th style="padding:5px 4px;text-align:center;font-size:10px;font-weight:700;color:#888;background:#f2efe8;min-width:42px">${m}</th>`).join('');
+  // Heatmap rows
+  const hmHead = ML.map(m => '<th style="padding:5px 3px;text-align:center;font-size:9px;font-weight:700;color:#8C8E8F;background:#f2f0eb;min-width:38px">' + m + '</th>').join('');
   const hmRows = state.workers.map(w => {
     const cells = yms.map(ym => {
-      const d = util[w][ym];
-      const txt = d.cap === 0 ? '—' : `${Math.round(d.pct * 100)}%`;
-      return `<td style="padding:6px 2px;text-align:center;font-size:10px;background:${hc(d.pct)};color:${tc(d.pct)};font-weight:${d.pct >= 0.76 ? 700 : 400}">${txt}</td>`;
+      const d    = util[w][ym];
+      const vac  = state.absences?.[w]?.[ym] ? '<br><span style="font-size:8px;opacity:.85">✈</span>' : '';
+      const txt  = d.cap === 0 ? '—' : Math.round(d.pct * 100) + '%';
+      return '<td style="padding:5px 2px;text-align:center;font-size:9.5px;background:' + hc(d.pct) + ';color:' + tc(d.pct) + ';font-weight:' + (d.pct >= 0.76 ? 700 : 400) + '">' + txt + vac + '</td>';
     }).join('');
     const avg = yms.reduce((s, ym) => s + util[w][ym].pct, 0) / 12;
-    return `<tr>
-      <td style="padding:6px 12px 6px 0;font-size:11px;font-weight:500;white-space:nowrap">${w}</td>
-      ${cells}
-      <td style="padding:6px 6px;text-align:center;font-size:10px;background:${hc(avg)};color:${tc(avg)};font-weight:700;border-left:2px solid #ccc">${Math.round(avg * 100)}%</td>
-    </tr>`;
+    return '<tr>'
+      + '<td style="padding:5px 10px 5px 0;font-size:10.5px;font-weight:500;white-space:nowrap">' + w + '</td>'
+      + cells
+      + '<td style="padding:5px;text-align:center;font-size:9.5px;background:' + hc(avg) + ';color:' + tc(avg) + ';font-weight:700;border-left:2px solid #ccc">' + Math.round(avg * 100) + '%</td>'
+      + '</tr>';
   }).join('');
 
-  // ── HTML — Secção 3: matriz projectos ────────────────────────────
-  const truncP = p => p.length > 14 ? p.slice(0, 13) + '…' : p;
-  const projHead = projs.map(p =>
-    `<th title="${p}" style="padding:4px 6px;text-align:right;font-size:10px;font-weight:700;color:#666;max-width:80px;white-space:nowrap;overflow:hidden">${truncP(p)}</th>`
-  ).join('');
+  // Project matrix
+  const truncP   = p => p.length > 12 ? p.slice(0, 11) + '…' : p;
+  const projHead = projs.map(p => '<th title="' + p + '" style="padding:4px 5px;text-align:right;font-size:9px;font-weight:700;color:#666;max-width:75px;white-space:nowrap">' + truncP(p) + '</th>').join('');
   const projRows = state.workers.map(w => {
     const cells = projs.map(p => {
-      const h = projH[w]?.[p] || 0;
-      const alpha = h > 0 ? 0.12 + 0.70 * (h / maxProjH) : 0;
-      const bg    = h > 0 ? `rgba(196,84,29,${alpha.toFixed(2)})` : 'transparent';
-      const fg    = alpha > 0.55 ? '#fff' : '#333';
-      return `<td style="padding:5px 8px;text-align:right;font-size:10px;background:${bg};color:${fg}">${h > 0 ? Math.round(h) + 'h' : ''}</td>`;
+      const h  = projH[w]?.[p] || 0;
+      const al = h > 0 ? 0.12 + 0.70 * (h / maxProjH) : 0;
+      const bg = h > 0 ? 'rgba(139,38,56,' + al.toFixed(2) + ')' : 'transparent';
+      const fg = al > 0.5 ? '#fff' : '#333';
+      return '<td style="padding:4px 7px;text-align:right;font-size:9.5px;background:' + bg + ';color:' + fg + '">' + (h > 0 ? Math.round(h) + 'h' : '') + '</td>';
     }).join('');
-    const tot = workerTot[w];
-    return `<tr>
-      <td style="padding:5px 12px 5px 0;font-size:11px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:2">${w}</td>
-      ${cells}
-      <td style="padding:5px 8px;text-align:right;font-size:11px;font-weight:700;border-left:2px solid #ccc">${tot > 0 ? Math.round(tot) + 'h' : '—'}</td>
-    </tr>`;
+    return '<tr>'
+      + '<td style="padding:4px 10px 4px 0;font-size:10.5px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:2">' + w + '</td>'
+      + cells
+      + '<td style="padding:4px 7px;text-align:right;font-size:10.5px;font-weight:700;border-left:2px solid #ccc">' + (workerTot[w] > 0 ? Math.round(workerTot[w]) + 'h' : '—') + '</td>'
+      + '</tr>';
   }).join('');
-  const totRow = projs.map(p =>
-    `<td style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700;border-top:2px solid #bbb">${Math.round(projTot[p])}h</td>`
-  ).join('');
+  const totRow = projs.map(p => '<td style="padding:5px 7px;text-align:right;font-size:9.5px;font-weight:700;border-top:2px solid #ccc">' + Math.round(projTot[p]) + 'h</td>').join('');
 
-  // ── Montar HTML ──────────────────────────────────────────────────
-  const genDate = now.toLocaleDateString('pt-PT', {day:'2-digit', month:'long', year:'numeric'});
-  const curML   = ML[curM - 1] + ' ' + curYear;
+  // Color legend
+  const legend = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'
+    + [['#f2f0eb','0%'],['#d4eadb','1–25%'],['#a3c8ad','26–75%'],['#4a8f5e','76–95%'],['#d97c10','96–110%'],['#8B2638','>110%']].map(
+      ([c, l]) => '<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:#777"><div style="width:11px;height:11px;border-radius:2px;background:' + c + ';flex-shrink:0"></div>' + l + '</div>'
+    ).join('')
+    + '<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:#777"><span>✈</span>Férias registadas</div>'
+    + '</div>';
 
-  const html = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">
-<title>Planeamento de Recursos · ${curYear}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,Arial,sans-serif;color:#1a1917;background:#f0ede6;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-.page{width:210mm;max-width:210mm;margin:0 auto 24px;background:#fff;padding:18mm 16mm;min-height:270mm}
-h1{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#1a1917}
-h2{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#999;margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid #e8e4dc}
-.meta{font-size:11px;color:#999;margin-top:3px}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
-.kpi{background:#f6f3ec;border-radius:8px;padding:14px 14px 12px}
-.kpi-l{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:#999;font-weight:700;margin-bottom:5px}
-.kpi-v{font-size:30px;font-weight:800;line-height:1}
-.kpi-s{font-size:9px;color:#aaa;margin-top:4px}
-table{border-collapse:collapse;width:100%}
-.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
-.lg{display:flex;align-items:center;gap:5px;font-size:10px;color:#777}
-.ld{width:12px;height:12px;border-radius:2px;flex-shrink:0}
-.print-btn{position:fixed;bottom:28px;right:28px;background:#c4541d;color:#fff;border:none;padding:12px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(196,84,29,.4);z-index:99;letter-spacing:.02em}
-.print-btn:hover{background:#a83e12}
-@media print{
-  body{background:#fff}
-  .print-btn{display:none!important}
-  .page{margin:0;padding:12mm 14mm;page-break-after:always;min-height:unset}
-  .page:last-child{page-break-after:auto}
-}
-</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+  // Assumptions box
+  const assumptionsBox = '<div style="background:#f6f3ec;border-left:3px solid #8C8E8F;padding:10px 14px;margin-top:16px;border-radius:0 6px 6px 0">'
+    + '<div style="font-size:7.5px;text-transform:uppercase;letter-spacing:.12em;color:#8C8E8F;font-weight:700;margin-bottom:6px">Pressupostos do relatório</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:9.5px;color:#555">'
+    + '<div>⚠ Sobrealocado: &gt;110% da capacidade</div>'
+    + '<div>📊 Capacidade padrão: 140h/mês</div>'
+    + '<div>⚠ Em risco: sem trabalho nos próximos 3 meses</div>'
+    + '<div>✈ Férias: capacidade reduzida por ausências SIGEI</div>'
+    + '</div></div>';
 
-<!-- ═══ PÁGINA 1 · RESUMO ═══ -->
-<div class="page">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
-    <div>
-      <h1>Planeamento de Recursos</h1>
-      <div class="meta">Equipa de Processos · INEGI &nbsp;·&nbsp; Gerado em ${genDate}</div>
-    </div>
-    <div style="font-size:36px;font-weight:900;color:#c4541d;letter-spacing:-2px;opacity:.85">${curYear}</div>
-  </div>
+  // Page 1 — Executive Summary
+  const page1 = '<div class="page">'
+    + pageHeader('Planeamento de Recursos — Resumo Executivo')
+    + h2('Indicadores — ' + refLabel)
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'
+    + kpiCard('Utilização média', avgUtil + '%', withCap.length + ' pessoa(s) com capacidade', kpiColor(avgUtil / 100))
+    + kpiCard('Em risco', atRisk, 'sem trabalho nos próx. 3 meses', atRisk > 0 ? '#d97c10' : '#2d7a4a')
+    + kpiCard('Sobrealoções >110%', overMths, 'mês×pessoa em ' + curY, overMths > 0 ? '#8B2638' : '#2d7a4a')
+    + kpiCard('Equipa', state.workers.length, state.projects.filter(p => p.active !== false).length + ' projecto(s) activos', '#444')
+    + '</div>'
+    + h2('Utilização por pessoa — ' + refLabel)
+    + '<table style="table-layout:fixed;width:100%;border-collapse:collapse"><tbody>' + barsHTML + '</tbody></table>'
+    + legend
+    + h2('Tendência — Procura vs Capacidade (próximos 12 meses)')
+    + '<div style="margin-bottom:4px">' + trendSVG + '</div>'
+    + '<div style="font-size:9px;color:#8C8E8F">Procura: horas alocadas totais &nbsp;·&nbsp; Capacidade: soma das capacidades mensais de toda a equipa</div>'
+    + assumptionsBox
+    + '</div>';
 
-  <h2>Indicadores — ${curML}</h2>
-  <div class="kpis">
-    <div class="kpi">
-      <div class="kpi-l">Utilização média</div>
-      <div class="kpi-v" style="color:${kpiColor(avgUtil / 100)}">${avgUtil}%</div>
-      <div class="kpi-s">${withCap.length} pessoa(s) com capacidade</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-l">Em risco</div>
-      <div class="kpi-v" style="color:${atRisk > 0 ? '#c07000' : '#2d7a4a'}">${atRisk}</div>
-      <div class="kpi-s">sem trabalho nos próx. 3 meses</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-l">Sobrealocações &gt;110%</div>
-      <div class="kpi-v" style="color:${overMths > 0 ? '#e53e3e' : '#2d7a4a'}">${overMths}</div>
-      <div class="kpi-s">mês×pessoa no ano ${curYear}</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-l">Equipa</div>
-      <div class="kpi-v">${state.workers.length}</div>
-      <div class="kpi-s">${state.projects.filter(p => p.active !== false).length} projecto(s) activos</div>
-    </div>
-  </div>
+  // Page 2 — Heatmap
+  const page2 = fullReport ? '<div class="page">'
+    + pageHeader('Heatmap de Utilização')
+    + h2('Pessoa × Mês — ' + curY)
+    + '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">'
+    + '<thead><tr><th style="padding:5px 10px 5px 0;font-size:9px;color:#8C8E8F"></th>' + hmHead
+    + '<th style="padding:5px;text-align:center;font-size:9px;font-weight:700;color:#8C8E8F;background:#f2f0eb;border-left:2px solid #ccc">Média</th>'
+    + '</tr></thead><tbody>' + hmRows + '</tbody></table></div>'
+    + legend
+    + '</div>' : '';
 
-  <h2>Utilização por pessoa — ${curML}</h2>
-  <table style="table-layout:fixed"><tbody>${barsHTML}</tbody></table>
-  <div class="legend" style="margin-top:12px">
-    <div class="lg"><div class="ld" style="background:#eceae3"></div>0% sem alocação</div>
-    <div class="lg"><div class="ld" style="background:#a8d5b0"></div>26–75% normal</div>
-    <div class="lg"><div class="ld" style="background:#45b36b"></div>76–95% bem alocado</div>
-    <div class="lg"><div class="ld" style="background:#f0a500"></div>96–110% atenção</div>
-    <div class="lg"><div class="ld" style="background:#e53e3e"></div>&gt;110% sobrealocado</div>
-  </div>
-</div>
+  // Page 3 — Project matrix
+  const page3 = fullReport ? '<div class="page">'
+    + pageHeader('Distribuição por Projecto')
+    + h2('Matriz Pessoa × Projecto — ' + curY)
+    + '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">'
+    + '<thead><tr>'
+    + '<th style="padding:4px 10px 4px 0;font-size:10px;color:#8C8E8F;position:sticky;left:0;background:#fff;z-index:3">Pessoa</th>'
+    + projHead
+    + '<th style="padding:4px 7px;text-align:right;font-size:9px;font-weight:700;color:#8C8E8F;border-left:2px solid #ccc">Total</th>'
+    + '</tr></thead>'
+    + '<tbody>' + projRows + '</tbody>'
+    + '<tfoot><tr>'
+    + '<td style="padding:6px 10px 4px 0;font-size:10.5px;font-weight:700;border-top:2px solid #ccc;position:sticky;left:0;background:#fff;z-index:2">Total</td>'
+    + totRow
+    + '<td style="padding:6px 7px;text-align:right;font-size:10.5px;font-weight:800;border-left:2px solid #ccc;border-top:2px solid #ccc">' + Math.round(grandTotal) + 'h</td>'
+    + '</tr></tfoot></table></div>'
+    + '</div>' : '';
 
-<!-- ═══ PÁGINA 2 · HEATMAP ═══ -->
-<div class="page">
-  <h1>Heatmap de Utilização</h1>
-  <div class="meta">% de capacidade utilizada por pessoa e mês · ${curYear}</div>
-  <h2>Pessoa × Mês</h2>
-  <div style="overflow-x:auto">
-    <table>
-      <thead><tr>
-        <th style="padding:5px 12px 5px 0;font-size:10px;color:#999"></th>
-        ${hmHead}
-        <th style="padding:5px 6px;text-align:center;font-size:10px;font-weight:700;color:#888;background:#f2efe8;border-left:2px solid #ccc">Média</th>
-      </tr></thead>
-      <tbody>${hmRows}</tbody>
-    </table>
-  </div>
-  <div class="legend" style="margin-top:14px">
-    <div class="lg"><div class="ld" style="background:#eceae3"></div>0%</div>
-    <div class="lg"><div class="ld" style="background:#d4eadb"></div>1–25%</div>
-    <div class="lg"><div class="ld" style="background:#a8d5b0"></div>26–75%</div>
-    <div class="lg"><div class="ld" style="background:#45b36b"></div>76–95%</div>
-    <div class="lg"><div class="ld" style="background:#f0a500"></div>96–110%</div>
-    <div class="lg"><div class="ld" style="background:#e53e3e"></div>&gt;110%</div>
-  </div>
-</div>
-
-<!-- ═══ PÁGINA 3 · PROJECTOS ═══ -->
-<div class="page">
-  <h1>Distribuição por Projecto</h1>
-  <div class="meta">Horas totais alocadas por pessoa e projecto · ${curYear}</div>
-  <h2>Matriz Pessoa × Projecto</h2>
-  <div style="overflow-x:auto">
-    <table>
-      <thead><tr>
-        <th style="padding:5px 12px 5px 0;font-size:11px;color:#999;position:sticky;left:0;background:#fff;z-index:3">Pessoa</th>
-        ${projHead}
-        <th style="padding:5px 8px;text-align:right;font-size:10px;font-weight:700;color:#999;border-left:2px solid #ccc">Total</th>
-      </tr></thead>
-      <tbody>${projRows}</tbody>
-      <tfoot><tr>
-        <td style="padding:7px 12px 5px 0;font-size:11px;font-weight:700;border-top:2px solid #bbb;position:sticky;left:0;background:#fff;z-index:2">Total</td>
-        ${totRow}
-        <td style="padding:7px 8px;text-align:right;font-size:11px;font-weight:800;border-left:2px solid #ccc;border-top:2px solid #bbb">${Math.round(grandTotal)}h</td>
-      </tr></tfoot>
-    </table>
-  </div>
-</div>
-</body></html>`;
+  const html = '<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">'
+    + '<title>Planeamento de Recursos · ' + curY + '</title>'
+    + '<style>'
+    + '*{box-sizing:border-box;margin:0;padding:0}'
+    + 'body{font-family:\'DIN Next LT Pro\',\'Segoe UI\',system-ui,Arial,sans-serif;color:#1a1917;background:#f0ede6;print-color-adjust:exact;-webkit-print-color-adjust:exact}'
+    + '.page{width:210mm;max-width:210mm;margin:0 auto 24px;background:#fff;padding:13mm 15mm;min-height:270mm}'
+    + 'table{border-collapse:collapse}'
+    + '.print-btn{position:fixed;bottom:24px;right:24px;background:#8B2638;color:#fff;border:none;padding:11px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(139,38,56,.35);z-index:99;letter-spacing:.02em}'
+    + '.print-btn:hover{background:#6e1f2c}'
+    + '@media print{'
+    + 'body{background:#fff}'
+    + '.print-btn{display:none!important}'
+    + '.page{margin:0;padding:10mm 14mm;page-break-after:always;min-height:unset}'
+    + '.page:last-child{page-break-after:auto}'
+    + '}'
+    + '</style></head><body>'
+    + '<button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>'
+    + page1 + page2 + page3
+    + '</body></html>';
 
   const win = window.open('', '_blank');
   if (!win) { toast('Permite popups para este site e tenta novamente', 'error'); return; }
   win.document.write(html);
   win.document.close();
+  document.getElementById('modal-report').classList.remove('active');
   toast('Relatório gerado — usa Ctrl+P para guardar PDF');
 }
-
-
 // ════════════════════════════════════════════════════════════════════════
 // DOWNLOAD / UPLOAD JSON
 // ════════════════════════════════════════════════════════════════════════

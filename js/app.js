@@ -190,7 +190,15 @@ document.querySelectorAll('.dm-item').forEach(item => {
 document.getElementById('btn-show-changelog').onclick = () => showChangelogModal(null, sessionCtx.initials);
 document.getElementById('btn-recover-backup').onclick = () => recoverAutoBackup();
 document.getElementById('btn-checkin').onclick = checkIn;
-document.getElementById('btn-export-report').onclick = exportMonthlyReport;
+document.getElementById('btn-export-report').onclick = openReportModal;
+document.getElementById('modal-report-close').onclick = () => document.getElementById('modal-report').classList.remove('active');
+document.getElementById('modal-report-cancel').onclick = () => document.getElementById('modal-report').classList.remove('active');
+document.getElementById('btn-report-generate').onclick = () => {
+  const year = parseInt(document.getElementById('rpt-year').value, 10);
+  const filterProject = document.getElementById('rpt-project').value;
+  const fullReport = document.querySelector('input[name="rpt-level"]:checked')?.value !== 'exec';
+  exportMonthlyReport({ year, filterProject, fullReport });
+};
 
 // Ctrl+Z global para undo
 document.addEventListener('keydown', e => {
