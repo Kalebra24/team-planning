@@ -566,8 +566,8 @@ document.addEventListener('mouseup', e => {
   const worker = _gdc.worker;
   _gdc.worker = null; _gdc.track = null; _gdc.startYm = null; _gdc.endYm = null;
   if (!s || !en || !worker) return;
-  // Threshold: ignorar cliques simples (sem drag)
-  if (s === en && e.target.closest('.gantt-bar')) return;
+  // Threshold: ignorar cliques simples (sem drag) — exige arrastar pelo menos 1 mês
+  if (s === en) return;
   // Abrir modal
   openModal({ id: null, worker, project:'', wp:'', task:'', start:s, end:en, totalHours:0, monthsHours:{} });
   document.getElementById('f-id').value = '';
