@@ -303,10 +303,10 @@ Quando inicias sessão, o diário abre automaticamente a mostrar apenas o que mu
 Sim. Cada operação (criar, editar, eliminar) guarda imediatamente no servidor. Não há botão "Guardar".
 
 **Posso usar em simultâneo com colegas?**
-Sim, mas evita editar o mesmo registo ao mesmo tempo. A última gravação prevalece.
+Sim. A aplicação mostra no cabeçalho quem mais está activo (indicador de presença). Se abrires uma alocação para edição e outro utilizador a alterar entretanto, recebes um aviso antes de guardar — podes confirmar a sobreposição ou cancelar para reveres as mudanças remotas.
 
 **O que acontece se fechar o browser sem fazer Sair?**
 Os dados ficam guardados. A tua sessão fica marcada como activa até fazeres Sair explicitamente ou o token expirar (~2h).
 
 **Perdi dados / fiz algo errado. Como reverter?**
-Usa o **Arquivo** se tinhas um snapshot recente, ou **Dados → Carregar JSON** se tens um backup manual.
+Antes de cada acção destrutiva (Restaurar, Limpar Tudo, Substituir JSON), a aplicação cria automaticamente um backup local. Usa **Dados → Recuperar backup automático** para repor o estado imediatamente anterior. Para perdas mais antigas, usa o **Arquivo** se tinhas um snapshot, ou **Dados → Carregar JSON** se tens um backup manual.

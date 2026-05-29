@@ -1,4 +1,4 @@
-// ════════════════════════════════════════════════════════════════════════
+﻿// ════════════════════════════════════════════════════════════════════════
 // VIEWS / NAV
 // ════════════════════════════════════════════════════════════════════════
 document.getElementById('tabs').addEventListener('click', e => {
@@ -756,6 +756,7 @@ window.removePerson = async (name) => {
 // MODAL: NOVA / EDITAR
 // ════════════════════════════════════════════════════════════════════════
 const modal = document.getElementById('modal');
+let _openedRecordHash = null;
 
 function openModal(record) {
   // Reset to hours mode
@@ -766,6 +767,7 @@ function openModal(record) {
 
   document.getElementById('modal-title').textContent = record ? 'Editar alocação' : 'Nova alocação';
   document.getElementById('modal-delete').style.display = record ? 'inline-flex' : 'none';
+  _openedRecordHash = record ? recordContentHash(record) : null;
 
   // populate selects — use new Option() to avoid innerHTML encoding issues
   const ws = document.getElementById('f-worker');
@@ -940,6 +942,14 @@ document.getElementById('form-alloc').addEventListener('submit', async (e) => {
     }
   });
   const realSum = Object.values(monthsHours).reduce((s,v) => s+v, 0);
+
+  // Optimistic locking: if another user saved this record since we opened it, warn before overwriting
+  if (id) {
+    const current = state.records.find(r => r.id === id);
+    if (current && recordContentHash(current) !== _openedRecordHash) {
+      if (!confirm('Esta alocacao foi alterada por outro utilizador enquanto editavas.\n\nGuardar mesmo assim (sobrescrever)?')) return;
+    }
+  }
 
   const record = {
     id: id || uuid(),
@@ -1267,6 +1277,7 @@ document.getElementById('snapshot-restore-btn').onclick = async () => {
   const s = (state.planSnapshots || []).find(x => x.id === _currentSnapshotId);
   if (!s) return;
   if (!confirm(`Restaurar o estado do plano de ${ymLabel(s.planMonth)}?\nO estado atual será substituído.`)) return;
+  autoBackup('Antes de Restaurar');
   state.workers = [...s.workers];
   state.projects = s.projects.map(p => ({...p}));
   state.capacity = JSON.parse(JSON.stringify(s.capacity));

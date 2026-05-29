@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt">
 <head>
 <meta charset="UTF-8">
@@ -28,6 +28,7 @@
         <span class="ci-label" id="checkin-label">Sem sessão</span>
         <button class="btn btn-sm" id="btn-checkin" style="margin-left:2px">Entrar</button>
       </div>
+      <div id="presence-indicator" class="presence-indicator" style="display:none" title="Quem mais está activo agora"></div>
       <div class="data-menu">
         <button class="btn btn-sm" id="btn-data-menu">Dados ▾</button>
         <div class="data-menu-panel" id="data-menu-panel">
@@ -83,6 +84,13 @@
             <button type="button" class="dm-item" id="btn-export-report">
               <span>📊 Relatório Visual</span>
               <span class="dm-hint">Dashboard · Heatmap · Projectos → PDF</span>
+            </button>
+          </div>
+                    <div class="dm-section">
+            <div class="dm-label">Recuperação</div>
+            <button type="button" class="dm-item" id="btn-recover-backup">
+              <span>⟲ Recuperar backup automático</span>
+              <span class="dm-hint">Estado antes da última acção destrutiva</span>
             </button>
           </div>
           <div class="dm-section">

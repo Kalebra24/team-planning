@@ -1,4 +1,4 @@
-// ════════════════════════════════════════════════════════════════════════
+﻿// ════════════════════════════════════════════════════════════════════════
 // AUTO-REFRESH (#2)
 // ════════════════════════════════════════════════════════════════════════
 let _autoRefreshPending = null;
@@ -42,6 +42,7 @@ function applyRemoteRefresh() {
   state.sessions  = data.sessions  || [];
   renderView(currentView());
   renderEquipa();
+  updatePresenceIndicator();
   toast('Dados actualizados');
 }
 
@@ -187,6 +188,7 @@ document.querySelectorAll('.dm-item').forEach(item => {
 });
 
 document.getElementById('btn-show-changelog').onclick = () => showChangelogModal(null, sessionCtx.initials);
+document.getElementById('btn-recover-backup').onclick = () => recoverAutoBackup();
 document.getElementById('btn-checkin').onclick = checkIn;
 document.getElementById('btn-export-report').onclick = exportMonthlyReport;
 
@@ -261,6 +263,28 @@ document.getElementById('modal-changelog').addEventListener('click', e => {
   if (e.target.id === 'modal-changelog') document.getElementById('modal-changelog').classList.remove('active');
 });
 
+
+// ════════════════════════════════════════════════════════════════════════
+// PRESENCE INDICATOR
+// ════════════════════════════════════════════════════════════════════════
+function updatePresenceIndicator() {
+  const el = document.getElementById('presence-indicator');
+  if (!el) return;
+  const ACTIVE_WINDOW = 8 * 60 * 60 * 1000;
+  const now = Date.now();
+  const active = (state.sessions || []).filter(s =>
+    !s.checked_out_at &&
+    (now - new Date(s.checked_in_at).getTime()) < ACTIVE_WINDOW
+  );
+  const others = active.filter(s => s.user_initials !== sessionCtx.initials);
+  if (!others.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = others.map(s => {
+    const since = new Date(s.checked_in_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    const initials = s.user_initials.slice(0, 2).toUpperCase();
+    return `<span class="presence-avatar" title="${s.user_initials} activo desde ${since}">${initials}</span>`;
+  }).join('');
+}
 // ════════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════════
@@ -288,5 +312,6 @@ document.getElementById('modal-changelog').addEventListener('click', e => {
   }
 
   updateCheckinUI();
+  updatePresenceIndicator();
   renderDashboard();
 })();

@@ -1,4 +1,4 @@
-// ════════════════════════════════════════════════════════════════════════
+﻿// ════════════════════════════════════════════════════════════════════════
 // TENDÊNCIA HISTÓRICA (#7)
 // ════════════════════════════════════════════════════════════════════════
 function renderTrendChart() {
@@ -600,6 +600,7 @@ document.getElementById('impj-replace').onclick = async () => {
   if (!guardEdit()) return;
   const p = pendingImport.value;
   if (!p) return;
+  autoBackup('Antes de Substituir JSON');
   state.workers = [...p.workers];
   state.projects = [...p.projects];
   state.capacity = {...p.capacity};
@@ -1525,6 +1526,7 @@ document.getElementById('mf-confirm').onclick = async () => {
 document.getElementById('btn-clear').onclick = async () => {
   if (!guardEdit()) return;
   if (!confirm('Eliminar TODAS as alocações? (mantém pessoas, projetos e capacidades)')) return;
+  autoBackup('Antes de Limpar Tudo');
   state.records = [];
   await saveState();
   toast('Alocações removidas');
@@ -1685,3 +1687,25 @@ document.getElementById('csv-confirm').onclick = async () => {
   if (saveResult === 'ok') toast(`${newRecords.length} alocações guardadas no servidor`);
 };
 
+
+// ════════════════════════════════════════════════════════════════════════
+// RECUPERAR BACKUP AUTOMATICO
+// ════════════════════════════════════════════════════════════════════════
+window.recoverAutoBackup = async () => {
+  if (!guardEdit()) return;
+  const bk = getAutoBackup();
+  if (!bk) { toast('Sem backup automatico disponivel', 'error'); return; }
+  const ts = new Date(bk.ts).toLocaleString('pt-PT');
+  const msg = `Recuperar backup automatico?\n${bk.label} -- ${ts}\n\n${bk.records.length} alocacoes · ${bk.workers.length} pessoas`;
+  if (!confirm(msg)) return;
+  autoBackup('Antes de Recuperar Backup');
+  state.workers  = bk.workers;
+  state.projects = bk.projects;
+  state.records  = bk.records;
+  state.capacity = bk.capacity;
+  if (bk.absences) state.absences = bk.absences;
+  await saveState();
+  resetUIFilters();
+  renderView(currentView());
+  toast('Backup automatico recuperado');
+};

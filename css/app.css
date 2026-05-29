@@ -1,4 +1,4 @@
-  :root {
+﻿  :root {
     --bg: #f6f4ee;
     --bg-card: #fbfaf6;
     --ink: #1a1814;
@@ -1092,7 +1092,21 @@
   .checkin-pill .ci-label { color: var(--ink-soft); font-size: 12px; }
   .checkin-pill.active .ci-label { color: var(--ok); font-weight: 600; font-family: 'JetBrains Mono', monospace; }
 
-  /* ──────── CHANGELOG MODAL ──────── */
+  /* ──
+  /* -------- PRESENCE INDICATOR -------- */
+  .presence-indicator { display: flex; align-items: center; gap: 3px; }
+  .presence-avatar {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--ink-faint); color: white;
+    font-size: 10px; font-weight: 700; letter-spacing: -0.5px;
+    border: 2px solid var(--bg);
+    cursor: default; user-select: none;
+    opacity: 0.85;
+    transition: opacity 0.15s;
+  }
+  .presence-avatar:hover { opacity: 1; }
+────── CHANGELOG MODAL ──────── */
   .cl-list { display: flex; flex-direction: column; }
   .cl-item {
     display: grid;

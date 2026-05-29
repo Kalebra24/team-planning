@@ -105,3 +105,26 @@ function sanitizeInitials(raw) {
   // só A-Z e dígitos, uppercase, máx 4
   return noAccents.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// AUTO-BACKUP (localStorage) — snapshot automatico antes de accoes destrutivas
+// ════════════════════════════════════════════════════════════════════════
+const _AUTO_BACKUP_KEY = 'planeamento_auto_backup';
+
+function autoBackup(label) {
+  try {
+    localStorage.setItem(_AUTO_BACKUP_KEY, JSON.stringify({
+      label,
+      ts: new Date().toISOString(),
+      workers:  JSON.parse(JSON.stringify(state.workers)),
+      projects: JSON.parse(JSON.stringify(state.projects)),
+      records:  JSON.parse(JSON.stringify(state.records)),
+      capacity: JSON.parse(JSON.stringify(state.capacity)),
+      absences: JSON.parse(JSON.stringify(state.absences || {})),
+    }));
+  } catch (_) {}
+}
+
+function getAutoBackup() {
+  try { return JSON.parse(localStorage.getItem(_AUTO_BACKUP_KEY)); } catch { return null; }
+}
