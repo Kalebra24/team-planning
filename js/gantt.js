@@ -733,7 +733,7 @@ function renderGantt() {
             const isOver = pm > 1.001;
             const value = ganttView.unit === 'pm' ? pm.toFixed(2) : round2(h);
             return `<div class="gb-month-cell${isOver ? ' over' : ''}" title="${ymLabel(ym)} · ${round2(h)}h · ${pm.toFixed(2)} PM (cap. ${cap}h)">
-              <input type="number" step="${ganttView.unit === 'pm' ? '0.05' : '1'}" min="0" value="${value}" data-rec="${r.id}" data-ym="${ym}" />
+              <input type="number" step="${ganttView.unit === 'pm' ? 'any' : '1'}" min="0" value="${value}" data-rec="${r.id}" data-ym="${ym}" />
             </div>`;
           }).join('');
           barInner = `<div class="gb-month-grid" style="grid-template-columns:repeat(${monthsActive.length}, 1fr)">${cells}</div>
