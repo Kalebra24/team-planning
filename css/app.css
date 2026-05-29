@@ -729,6 +729,8 @@
     box-shadow: 0 12px 32px rgba(0,0,0,0.12);
     z-index: 30;
     padding: 6px 0;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
   }
   .data-menu.open .data-menu-panel { display: block; }
   .dm-section { padding: 6px 0; }
