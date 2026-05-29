@@ -11,7 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#c4541d">
-<!-- GitLab Files API backend — no external SDK needed -->
+<!-- Supabase REST API backend — no external SDK needed -->
 <style>
   :root {
     --bg: #f6f4ee;
@@ -2678,93 +2678,90 @@ const OAUTH = {
 };
 
 // ════════════════════════════════════════════════════════════════════════
-// PERSISTENCE — GitLab Repository Files API
+// PERSISTENCE — Supabase REST API
 // ════════════════════════════════════════════════════════════════════════
-// GitLab instance + project token hardcoded — dados em data/state.json (ramo: main)
+// Supabase project URL + anon key hardcoded — dados em tabela app_state
+// project_id separa dados de diferentes aplicações na mesma base de dados
 
-const GL = {
-  baseUrl:   'https://git.inegi.up.pt',
-  projectId: '192',
-  token:     'glpat-USO3pOs0oXdThMVu2r3f_286MQp1OjFsCA.01.0y1fi9zyv',
-  dataPath:  'data%2Fstate.json',
-  branch:    'main',
+const SB = {
+  url:       'https://milzbgsbxshfhkyxkpvt.supabase.co',
+  anonKey:   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1pbHpiZ3NieHNoZmhreXhrcHZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTQzNjUsImV4cCI6MjA5NTYzMDM2NX0.n5l2JCXBdxZiqFXLSERgPldJoiLyjy1tm4OKorIlwfw',
+  projectId: 'team-planning-processos',
+  table:     'app_state',
 
-  headers() {
-    return { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': this.token };
+  headers(extra = {}) {
+    return {
+      'Content-Type': 'application/json',
+      'apikey': this.anonKey,
+      'Authorization': `Bearer ${this.anonKey}`,
+      ...extra,
+    };
   },
 
+  isConfigured() { return !this.url.includes('YOUR_PROJECT'); },
 
-  isConfigured() { return true; },
-
-  // Lê o ficheiro e captura o SHA (last_commit_id) para conflict detection
+  // Lê a linha do projeto e captura a versão para conflict detection
   async readFile() {
-    // Primeiro obter metadata (SHA), depois conteúdo
-    try {
-      const metaUrl = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}?ref=${this.branch}`;
-      const metaRes = await fetch(metaUrl, { headers: this.headers() });
-      if (metaRes.status === 404) { state._remoteSha = null; return null; }
-      if (metaRes.ok) {
-        const meta = await metaRes.json();
-        state._remoteSha = meta.last_commit_id || null;
-      }
-    } catch (_) { /* ignorar erros de metadata */ }
-
-    const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}/raw?ref=${this.branch}&ts=${Date.now()}`;
+    const url = `${this.url}/rest/v1/${this.table}?project_id=eq.${encodeURIComponent(this.projectId)}&select=data,version`;
     const res = await fetch(url, { headers: this.headers() });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`GitLab read ${res.status}: ${await res.text()}`);
-    return res.json();
+    if (!res.ok) throw new Error(`Supabase read ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+    if (!rows.length) { state._remoteSha = null; return null; }
+    state._remoteSha = String(rows[0].version);
+    return rows[0].data;
   },
 
-  // Verifica o SHA remoto atual (sem carregar o conteúdo completo)
+  // Verifica a versão remota atual (sem carregar o conteúdo completo)
   async fetchRemoteSha() {
     try {
-      const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}?ref=${this.branch}`;
+      const url = `${this.url}/rest/v1/${this.table}?project_id=eq.${encodeURIComponent(this.projectId)}&select=version`;
       const res = await fetch(url, { headers: this.headers() });
       if (!res.ok) return null;
-      const meta = await res.json();
-      return meta.last_commit_id || null;
+      const rows = await res.json();
+      return rows.length ? String(rows[0].version) : null;
     } catch (_) { return null; }
   },
 
-  async writeFile(data, message, force = false) {
-    // Conflict detection: verificar se o SHA mudou desde o último read
-    // Nota: só activo quando temos um SHA de referência E não é force
+  async writeFile(data, _message, force = false) {
+    // Conflict detection: verificar se a versão mudou desde o último read
     if (!force && state._remoteSha) {
       const currentSha = await this.fetchRemoteSha();
       if (currentSha && currentSha !== state._remoteSha) {
-        // Conflito detectado — mostrar diálogo
-        await showConflictModal(data, message);
+        await showConflictModal(data, _message);
         return 'conflict';
       }
-      // SHA bate certo — guardar para atualizar após write
     }
 
-    const url = `${this.baseUrl}/api/v4/projects/${encodeURIComponent(this.projectId)}/repository/files/${this.dataPath}`;
-    const body = JSON.stringify({
-      branch: this.branch,
-      commit_message: message || `chore: update planning state [${new Date().toISOString().slice(0,16)}]`,
-      content: JSON.stringify(data, null, 2),
+    const nextVersion = state._remoteSha ? parseInt(state._remoteSha, 10) + 1 : 1;
+    const res = await fetch(`${this.url}/rest/v1/${this.table}`, {
+      method: 'POST',
+      headers: this.headers({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+      body: JSON.stringify({
+        project_id: this.projectId,
+        data,
+        version: nextVersion,
+        updated_at: new Date().toISOString(),
+      }),
     });
-    let res = await fetch(url, { method: 'PUT', headers: this.headers(), body });
-    if (res.status === 400 || res.status === 404) {
-      // Ficheiro ainda não existe — criar
-      res = await fetch(url, { method: 'POST', headers: this.headers(), body });
-    }
+
     if (res.status === 403) {
-      // O token OAuth não tem scope de escrita (ainda tem scope read_user antigo).
-      // Instruir o utilizador a fazer logout + login para obter o scope 'api'.
-      throw new Error('[HTTP 403] Permissões insuficientes — faz Sair e Entrar novamente para autorizar a escrita.');
+      throw new Error('[HTTP 403] Permissões insuficientes — verifica a anon key do Supabase.');
     }
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
-      throw new Error(`[HTTP ${res.status}] ${errBody.message || errBody.error || 'GitLab write failed'}`);
+      const errMsg = Array.isArray(errBody) ? errBody[0]?.message : (errBody.message || errBody.error);
+      throw new Error(`[HTTP ${res.status}] ${errMsg || 'Supabase write failed'}`);
     }
-    // A API do GitLab Files não devolve o SHA do novo commit na resposta de write.
-    // Fazemos um fetch do SHA pós-write para que o próximo conflict-check seja correcto.
+
+    // Actualizar SHA local com a versão confirmada pelo servidor
     try {
-      const newSha = await this.fetchRemoteSha();
-      if (newSha) state._remoteSha = newSha;
+      const result = await res.json();
+      const row = Array.isArray(result) ? result[0] : result;
+      if (row?.version) state._remoteSha = String(row.version);
+      else {
+        const newSha = await this.fetchRemoteSha();
+        if (newSha) state._remoteSha = newSha;
+      }
     } catch (_) { /* não bloquear o save se este fetch falhar */ }
     return 'ok';
   },
@@ -2778,7 +2775,7 @@ let _saveInProgress = false;
 let _saveQueued     = false;
 
 async function saveState(force = false) {
-  if (!GL.isConfigured()) return 'not_configured';
+  if (!SB.isConfigured()) return 'not_configured';
 
   // Se já há um save em curso, marcar para re-save e sair
   if (_saveInProgress) {
@@ -2808,7 +2805,7 @@ async function _saveStateOnce(force = false) {
   try {
     const now = new Date().toISOString();
     for (const r of state.records) if (!r.updatedAt) r.updatedAt = now;
-    const result = await GL.writeFile({
+    const result = await SB.writeFile({
       workers:   state.workers,
       projects:  state.projects,
       records:   state.records,
@@ -2835,14 +2832,14 @@ async function _saveStateOnce(force = false) {
     return 'ok';
   } catch (e) {
     _lastSaveError = e.message || 'Erro desconhecido';
-    console.error('Erro a guardar no GitLab:', e);
+    console.error('Erro a guardar no Supabase:', e);
     if (_lastSaveError.includes('[HTTP 403]')) {
       // Scope insuficiente — mostrar banner persistente a pedir re-login
       const rb = document.getElementById('reauth-banner');
       if (rb) rb.style.display = 'flex';
       toast('Permissões insuficientes — faz Sair e Entrar novamente', 'error');
     } else {
-      const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no GitLab';
+      const msg = e.message ? `Erro ao guardar: ${e.message}` : 'Erro ao guardar no Supabase';
       toast(msg, 'error');
     }
     updateSyncIndicator('error');
@@ -2866,9 +2863,9 @@ function recordContentHash(r) {
 }
 
 async function loadState() {
-  if (!GL.isConfigured()) return false;
+  if (!SB.isConfigured()) return false;
   try {
-    const data = await GL.readFile();
+    const data = await SB.readFile();
     if (!data || !data.workers || data.workers.length === 0) return false;
 
     state.workers   = data.workers  || [];
@@ -2897,7 +2894,7 @@ async function loadState() {
     return true;
   } catch (e) {
     console.error('loadState error:', e);
-    toast('Erro ao carregar dados do GitLab', 'error');
+    toast('Erro ao carregar dados do Supabase', 'error');
   }
   return false;
 }
@@ -4914,12 +4911,12 @@ async function undoLast() {
 
 // saveState sem push de undo (usado pelo undo para evitar loop)
 async function saveStateDirect() {
-  if (!GL.isConfigured()) return;
+  if (!SB.isConfigured()) return;
   updateSyncIndicator('saving');
   try {
     const now = new Date().toISOString();
     for (const r of state.records) if (!r.updatedAt) r.updatedAt = now;
-    await GL.writeFile({
+    await SB.writeFile({
       workers:   state.workers,
       projects:  state.projects,
       records:   state.records,
@@ -5003,12 +5000,12 @@ setInterval(updateSyncRelative, 60000);
 let _autoRefreshPending = null;
 
 async function checkRemoteChanges() {
-  if (!GL.isConfigured() || !state._remoteSha) return;
+  if (!SB.isConfigured() || !state._remoteSha) return;
   try {
-    const currentSha = await GL.fetchRemoteSha();
+    const currentSha = await SB.fetchRemoteSha();
     if (currentSha && currentSha !== state._remoteSha) {
       // Há alterações remotas — carregar dados novos mas não aplicar ainda
-      const remoteData = await GL.readFile();
+      const remoteData = await SB.readFile();
       if (remoteData) {
         _autoRefreshPending = remoteData;
         document.getElementById('refresh-banner').classList.add('show');
@@ -5057,7 +5054,7 @@ async function showConflictModal(data, message) {
   _conflictPendingData = data;
   _conflictPendingMsg = message;
   const localCount = (data.records || []).length;
-  const remoteData = _autoRefreshPending || await GL.readFile().catch(() => null);
+  const remoteData = _autoRefreshPending || await SB.readFile().catch(() => null);
   const remoteCount = (remoteData?.records || []).length;
   document.getElementById('conflict-diff').innerHTML = `
     <div>Versão local: <strong>${localCount}</strong> alocações</div>
@@ -5075,7 +5072,7 @@ document.getElementById('conflict-overwrite').onclick = async () => {
   if (!_conflictPendingData) return;
   updateSyncIndicator('saving');
   try {
-    await GL.writeFile(_conflictPendingData, _conflictPendingMsg, true); // force=true
+    await SB.writeFile(_conflictPendingData, _conflictPendingMsg, true); // force=true
     state._lastSavedAt = Date.now();
     updateSyncIndicator('ok');
     toast('Guardado (sobrescrito)');
