@@ -844,7 +844,7 @@ function buildMonthsEditor(existing) {
     const v = isPM ? (cap > 0 ? round2(hVal / cap) : 0) : hVal;
     return `<div class="month-cell">
       <label>${ymLabel(ym)}</label>
-      <input type="number" min="0" step="${isPM ? '0.05' : '0.5'}" data-ym="${ym}" value="${v}" class="month-input">
+      <input type="number" min="0" step="${isPM ? 'any' : '0.5'}" data-ym="${ym}" value="${v}" class="month-input">
     </div>`;
   }).join('');
   document.getElementById('months-editor').innerHTML = html;
@@ -886,7 +886,7 @@ document.querySelectorAll('.unit-btn').forEach(btn => {
     _allocUnit = newUnit;
     if (newUnit === 'pm') {
       document.getElementById('f-hours').value = cap > 0 ? round2(oldV / cap) : 0;
-      document.getElementById('f-hours').step = '0.05';
+      document.getElementById('f-hours').step = 'any';
       document.getElementById('months-unit-label').textContent = 'PM';
     } else {
       document.getElementById('f-hours').value = round2(oldV * cap);
