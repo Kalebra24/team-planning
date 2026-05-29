@@ -119,10 +119,10 @@ Tabela principal com todos os registos de alocação.
 > Para distribuir horas de forma desigual pelos meses, usa a secção **Distribuição mês a mês** no formulário.
 
 ### Editar uma alocação
-Clica no ícone ✏️ na linha da tabela.
+Clica no botão **Editar** na linha da tabela.
 
 ### Eliminar uma alocação
-Clica no ícone 🗑️ na linha da tabela. Pede confirmação.
+Abre a alocação para edição e clica **Eliminar** (botão vermelho no fundo do formulário). Pede confirmação.
 
 ### Limpar todas as alocações
 Botão **Limpar Tudo** (vermelho, canto superior direito da tabela). Remove todos os registos mas mantém pessoas, projectos e capacidades. Pede confirmação.
@@ -198,7 +198,7 @@ Lista de todos os projectos.
 
 - **Activar/desactivar projecto** — clica no nome. Projectos inactivos não aparecem nos dropdowns de nova alocação.
 - **Adicionar projecto** — escreve o nome no campo e clica **+ Adicionar**
-- **Eliminar projecto** — ícone 🗑️ (só projectos sem alocações)
+- **Eliminar projecto** — ícone 🗑️ (pede confirmação extra se o projecto tiver alocações associadas)
 
 ---
 
@@ -269,6 +269,17 @@ Ao carregar um JSON tens duas opções:
 | **↑ Importar Excel** | Carrega o ficheiro `.xlsx` de planeamento original |
 | **↓ Exportar Excel** | Gera um `.xlsx` com todas as alocações actuais |
 
+### Férias e Ausências
+
+| Opção | Uso |
+|---|---|
+| **📅 Importar Mapa de Férias** | Carrega o ficheiro HTML exportado do SIGEI; actualiza automaticamente as capacidades mensais (ausências reduzem a capacidade a 8h/dia) |
+| **📂 Importar CSV de Alocações** | Importa alocações a partir de um ficheiro CSV com colunas de PM por mês |
+
+### Relatório Visual
+
+**📊 Relatório Visual** — gera um relatório de 3 páginas (resumo executivo, heatmap, matriz pessoa × projecto) optimizado para impressão em PDF.
+
 ### Diário de Alterações
 **⧗ Diário de alterações** — mostra todas as modificações registadas, com o autor (username GitLab), o tipo de operação (criado / editado / eliminado) e a data/hora.
 
@@ -282,6 +293,7 @@ Quando inicias sessão, o diário abre automaticamente a mostrar apenas o que mu
 |---|---|
 | `Esc` | Fechar modal/diálogo aberto |
 | `Enter` | Confirmar formulário activo |
+| `Ctrl+Z` | Desfazer a última ação |
 
 ---
 

@@ -60,7 +60,7 @@ escritos directamente na base de dados Supabase através da sua REST API, usando
 
 A tabela `app_state` tem uma coluna `project_id` que isola os dados de diferentes
 aplicações na mesma base de dados Supabase. Para reutilizar a base de dados noutro
-projecto basta alterar o valor de `SB.projectId` no `index.html`.
+projecto basta alterar o valor de `SB.projectId` no `js/state.js`.
 
 ---
 
@@ -141,7 +141,7 @@ o valor líquido é guardado directamente em `state.capacity[pessoa][YYYY-MM]`.
 | Parâmetro | Valor |
 |---|---|
 | Project URL | `https://milzbgsbxshfhkyxkpvt.supabase.co` |
-| Anon Key | ver `SB.anonKey` em `index.html` |
+| Anon Key | ver `SB.anonKey` em `js/state.js` |
 | Tabela | `app_state` |
 | project_id | `team-planning-processos` |
 
