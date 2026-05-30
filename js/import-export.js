@@ -149,17 +149,35 @@ function openReportModal() {
     if (y === curY) o.selected = true;
     yearSel.appendChild(o);
   });
-  const projSel = document.getElementById('rpt-project');
-  projSel.innerHTML = '<option value="">Todos os projectos</option>';
+
+  const list = document.getElementById('rpt-project-list');
+  list.innerHTML = '';
   [...state.projects].sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
-    const o = document.createElement('option');
-    o.value = p.name; o.textContent = p.name;
-    projSel.appendChild(o);
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;font-size:13px;font-weight:400';
+    row.innerHTML = '<input type="checkbox" value="' + p.name.replace(/"/g, '&quot;') + '" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0"> ' + p.name;
+    row.addEventListener('mouseenter', () => { row.style.background = 'var(--line-soft)'; });
+    row.addEventListener('mouseleave', () => { row.style.background = ''; });
+    list.appendChild(row);
   });
+
+  const toggleBtn = document.getElementById('rpt-project-toggle-all');
+  toggleBtn.onclick = () => {
+    const boxes = list.querySelectorAll('input[type="checkbox"]');
+    const allChecked = [...boxes].every(b => b.checked);
+    boxes.forEach(b => { b.checked = !allChecked; });
+    toggleBtn.textContent = allChecked ? 'Selecionar todos' : 'Limpar seleção';
+  };
+  list.addEventListener('change', () => {
+    const boxes = list.querySelectorAll('input[type="checkbox"]');
+    const allChecked = [...boxes].every(b => b.checked);
+    toggleBtn.textContent = allChecked ? 'Limpar seleção' : 'Selecionar todos';
+  });
+
   document.getElementById('modal-report').classList.add('active');
 }
 
-function exportMonthlyReport({ year, filterProject = '', fullReport = true } = {}) {
+function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = {}) {
   const now    = new Date();
   const curY   = year || now.getFullYear();
   const ML     = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -167,9 +185,9 @@ function exportMonthlyReport({ year, filterProject = '', fullReport = true } = {
   const curM   = now.getMonth() + 1;
   const curYM  = ymKey(now.getFullYear(), curM);
 
-  // Filter records by project
-  const records = filterProject
-    ? state.records.filter(r => r.project === filterProject)
+  // Filter records by selected projects (empty = all)
+  const records = filterProjects.length
+    ? state.records.filter(r => filterProjects.includes(r.project))
     : state.records;
 
   // Utilization per person x month
@@ -293,7 +311,7 @@ function exportMonthlyReport({ year, filterProject = '', fullReport = true } = {
     + '<div style="display:flex;align-items:center;gap:14px">'
     + logoSVG
     + '<div><div style="font-size:14.5px;font-weight:800;color:#1a1917;letter-spacing:-0.3px">' + title + '</div>'
-    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">' + (filterProject ? 'Projecto: ' + filterProject : 'Todos os projectos') + ' &nbsp;·&nbsp; ' + curY + '</div></div></div>'
+    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">' + (filterProjects.length ? 'Projectos: ' + filterProjects.join(', ') : 'Todos os projectos') + ' &nbsp;·&nbsp; ' + curY + '</div></div></div>'
     + '<div style="text-align:right;font-size:9px;color:#8C8E8F;line-height:1.75">'
     + '<div>Gerado por <strong style="color:#444">' + genUser + '</strong></div>'
     + '<div>' + genDate + ', ' + genTime + '</div>'

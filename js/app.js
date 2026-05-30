@@ -195,9 +195,9 @@ document.getElementById('modal-report-close').onclick = () => document.getElemen
 document.getElementById('modal-report-cancel').onclick = () => document.getElementById('modal-report').classList.remove('active');
 document.getElementById('btn-report-generate').onclick = () => {
   const year = parseInt(document.getElementById('rpt-year').value, 10);
-  const filterProject = document.getElementById('rpt-project').value;
+  const filterProjects = [...document.querySelectorAll('#rpt-project-list input[type="checkbox"]:checked')].map(el => el.value);
   const fullReport = document.querySelector('input[name="rpt-level"]:checked')?.value !== 'exec';
-  exportMonthlyReport({ year, filterProject, fullReport });
+  exportMonthlyReport({ year, filterProjects, fullReport });
 };
 
 // Ctrl+Z global para undo

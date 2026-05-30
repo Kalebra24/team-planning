@@ -976,8 +976,11 @@
         <select id="rpt-year" style="width:110px"></select>
       </div>
       <div class="field">
-        <label>Projecto <span style="font-size:11px;color:var(--ink-faint)">(opcional)</span></label>
-        <select id="rpt-project" style="width:100%"></select>
+        <label style="display:flex;justify-content:space-between;align-items:baseline">
+          <span>Projectos <span style="font-size:11px;color:var(--ink-faint)">(todos se nenhum selecionado)</span></span>
+          <button type="button" id="rpt-project-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
+        </label>
+        <div id="rpt-project-list" style="max-height:130px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
       </div>
       <div class="field">
         <label>Nível de detalhe</label>
