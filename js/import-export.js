@@ -139,6 +139,7 @@ window.exportGanttPNG = () => {
 // ════════════════════════════════════════════════════════════════════════
 
 function openReportModal() {
+  try {
   const yearSel = document.getElementById('rpt-year');
   yearSel.innerHTML = '';
   const curY = new Date().getFullYear();
@@ -175,6 +176,7 @@ function openReportModal() {
   });
 
   document.getElementById('modal-report').classList.add('active');
+  } catch(err) { console.error('openReportModal:', err); toast('Erro ao abrir relatório: ' + err.message, 'error'); }
 }
 
 function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = {}) {
