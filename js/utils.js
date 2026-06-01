@@ -1,4 +1,4 @@
-// Marcar registo como modificado (chamar antes de saveState quando se alteram campos)
+﻿// Marcar registo como modificado (chamar antes de saveState quando se alteram campos)
 function markUpdated(rec) {
   if (rec) rec.updatedAt = new Date().toISOString();
 }
@@ -127,4 +127,13 @@ function autoBackup(label) {
 
 function getAutoBackup() {
   try { return JSON.parse(localStorage.getItem(_AUTO_BACKUP_KEY)); } catch { return null; }
+}
+
+
+// ── Records visíveis (exclui projectos ocultos) ──────────────────────────
+function visibleRecords() {
+  const hidden = state.projects.filter(p => p.hidden).map(p => p.name);
+  if (!hidden.length) return state.records;
+  const hiddenSet = new Set(hidden);
+  return state.records.filter(r => !hiddenSet.has(r.project));
 }

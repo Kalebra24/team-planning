@@ -35,9 +35,9 @@ function renderDashboard() {
   if (nMonth > 12) { nMonth = 1; nYear++; }
   const nextYM = ymKey(nYear, nMonth);
 
-  // Build utilByMonth: worker -> ym -> hours
+  // Build utilByMonth: worker -> ym -> hours (projectos ocultos excluídos)
   const utilByMonth = {};
-  for (const r of state.records) {
+  for (const r of visibleRecords()) {
     for (const [ym, h] of Object.entries(r.monthsHours)) {
       if (!utilByMonth[r.worker]) utilByMonth[r.worker] = {};
       utilByMonth[r.worker][ym] = (utilByMonth[r.worker][ym] || 0) + h;
@@ -80,8 +80,8 @@ function renderDashboard() {
     })
   );
 
-  // Stat 3: projects with allocations
-  const totalProjects = new Set(state.records.map(r => r.project)).size;
+  // Stat 3: projects with allocations (hidden excluded)
+  const totalProjects = new Set(visibleRecords().map(r => r.project)).size;
 
   document.getElementById('stats').innerHTML = `
     <div class="stat">
@@ -121,6 +121,16 @@ function renderDashboard() {
       </div>`;
   } else {
     document.getElementById('alerts-container').innerHTML = '';
+  }
+
+  // Aviso de projectos ocultos
+  const _hiddenProjCount = state.projects.filter(p => p.hidden).length;
+  const _hiddenNoticeEl = document.getElementById('hidden-proj-notice');
+  if (_hiddenNoticeEl) {
+    _hiddenNoticeEl.style.display = _hiddenProjCount ? 'flex' : 'none';
+    _hiddenNoticeEl.innerHTML = _hiddenProjCount
+      ? `🙈 <strong>${_hiddenProjCount} projecto${_hiddenProjCount > 1 ? 's' : ''} oculto${_hiddenProjCount > 1 ? 's' : ''}</strong> — as alocações não estão incluídas nestas métricas. <button class="btn btn-sm" style="font-size:11px" onclick="document.querySelector('[data-view=projetos]').click()">Gerir</button>`
+      : '';
   }
 
   // Next-month panel
@@ -241,7 +251,7 @@ function renderRecords() {
     projs.forEach(p => fpSel.add(new Option(p, p)));
   }
 
-  let rows = state.records;
+  let rows = visibleRecords();
   if (fw) rows = rows.filter(r => r.worker === fw);
   if (fp) rows = rows.filter(r => r.project === fp);
   if (search) {
@@ -318,7 +328,7 @@ function renderHeatmap() {
       util[w] = {};
       for (const ym of ymsRange) {
         let h = 0;
-        for (const r of state.records) {
+        for (const r of visibleRecords()) {
           if (r.worker === w && r.monthsHours[ym]) h += r.monthsHours[ym];
         }
         const cap = getCapacity(w, ym);
@@ -371,7 +381,9 @@ function renderHeatmap() {
       html += '</tr>';
     }
     html += '</tbody></table>';
-    document.getElementById('heatmap-wrap').innerHTML = html;
+    const _hpCount = state.projects.filter(p => p.hidden).length;
+    const _hpNotice = _hpCount ? `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--line-soft);border-radius:6px;font-size:12px;color:var(--ink-soft);margin-bottom:10px">🙈 <strong>${_hpCount} projecto${_hpCount>1?'s':''} oculto${_hpCount>1?'s':''}</strong> — alocações não incluídas. <button class="btn btn-sm" style="font-size:11px" onclick="document.querySelector('[data-view=projetos]').click()">Gerir</button></div>` : '';
+    document.getElementById('heatmap-wrap').innerHTML = _hpNotice + html;
   };
   drawHm();
 
@@ -545,19 +557,23 @@ function renderProjectsCatalog() {
 
   list.innerHTML = sorted.map(p => {
     const active = p.active !== false;
+    const hidden = !!p.hidden;
     const used = usedProjects.has(p.name);
+    const escapedName = p.name.replace(/'/g, "\\'");
     return `
-      <div class="person-card">
+      <div class="person-card" style="${hidden ? 'opacity:0.65' : ''}">
         <div style="flex:1; min-width:0">
-          <div class="name" style="cursor:pointer; display:flex; align-items:center; gap:8px" onclick="toggleProject('${p.name.replace(/'/g, "\\'")}')">
+          <div class="name" style="cursor:pointer; display:flex; align-items:center; gap:8px; flex-wrap:wrap" onclick="toggleProject('${escapedName}')">
             ${p.name}
             <span class="badge ${active ? 'ok' : ''}" style="${active ? '' : 'color:var(--ink-faint)'}">
               ${active ? 'ativo' : 'inativo'}
             </span>
+            ${hidden ? '<span class="badge" style="background:var(--line);color:var(--ink-faint);border:1px dashed currentColor;font-size:10px">🙈 oculto</span>' : ''}
           </div>
-          ${used ? `<div class="stats-mini">${state.records.filter(r=>r.project===p.name).length} alocação(ões)</div>` : '<div class="stats-mini" style="color:var(--ink-faint)">sem alocações</div>'}
+          ${used ? `<div class="stats-mini">${state.records.filter(r=>r.project===p.name).length} alocação(ões)${hidden ? ' · ocultas das vistas' : ''}</div>` : '<div class="stats-mini" style="color:var(--ink-faint)">sem alocações</div>'}
         </div>
-        <button class="x" onclick="deleteProject('${p.name.replace(/'/g, "\\'")}')" title="Remover projeto">×</button>
+        <button class="btn btn-sm" onclick="toggleProjectHidden('${escapedName}')" title="${hidden ? 'Mostrar alocações nas vistas' : 'Ocultar alocações das vistas'}" style="font-size:11px;white-space:nowrap">${hidden ? '👁 Mostrar' : '🙈 Ocultar'}</button>
+        <button class="x" onclick="deleteProject('${escapedName}')" title="Remover projeto">×</button>
       </div>
     `;
   }).join('') || '<p style="color:var(--ink-faint); font-size:13px; padding:8px 0">Sem projetos no catálogo.</p>';
@@ -570,6 +586,17 @@ window.toggleProject = async (name) => {
   p.active = p.active === false ? true : false;
   await saveState();
   renderProjectsCatalog();
+};
+
+window.toggleProjectHidden = async (name) => {
+  if (!guardEdit()) return;
+  const p = state.projects.find(x => x.name === name);
+  if (!p) return;
+  p.hidden = !p.hidden;
+  await saveState();
+  renderProjectsCatalog();
+  renderView(currentView());
+  toast(p.hidden ? `"${name}" oculto — alocações escondidas das vistas` : `"${name}" visível nas vistas`);
 };
 
 window.deleteProject = async (name) => {

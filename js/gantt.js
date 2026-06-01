@@ -617,14 +617,16 @@ function renderGantt() {
 
     const fw = ganttFilters.workers;
     const fp = ganttFilters.projects;
+    const hiddenProjects = new Set(state.projects.filter(p => p.hidden).map(p => p.name));
     const filtered = state.records.filter(r => {
+      if (hiddenProjects.has(r.project)) return false;
       if (fw && !fw.has(r.worker)) return false;
       if (fp && !fp.has(r.project)) return false;
       return ymsRange.some(ym => r.monthsHours[ym]);
     });
 
     // Info do filtro
-    const totalInRange = state.records.filter(r => ymsRange.some(ym => r.monthsHours[ym])).length;
+    const totalInRange = state.records.filter(r => !hiddenProjects.has(r.project) && ymsRange.some(ym => r.monthsHours[ym])).length;
     const rangeLabel = nCols === 1 ? ymLabel(from) : `${ymLabel(from)} → ${ymLabel(to)} · ${nCols} meses`;
     document.getElementById('gantt-filter-info').textContent =
       filtered.length === totalInRange

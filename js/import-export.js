@@ -187,10 +187,10 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
   const curM   = now.getMonth() + 1;
   const curYM  = ymKey(now.getFullYear(), curM);
 
-  // Filter records by selected projects (empty = all)
+  // Filter records by selected projects (empty = all visible)
   const records = filterProjects.length
     ? state.records.filter(r => filterProjects.includes(r.project))
-    : state.records;
+    : visibleRecords();
 
   // Utilization per person x month
   const util = {};
