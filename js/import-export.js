@@ -654,67 +654,110 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
     + '</div>'
     + '</div>';
 
-  // ── Pages 2+: detail per person ───────────────────────────────────────
+  // ── Pages 2+: detail per person (transposed: rows=months, cols=projects) ─
   let detailPages = '';
   if (fullReport) {
     detailPages = workers.map(w => {
       const projs = Object.keys(ppProj[w]).sort();
       if (!projs.length) return '';
 
-      // Month column headers — show year prefix on Jan
-      const monthCols = yms.map((ym, i) => {
-        const parsed = ymParse(ym);
-        const prefix = (parsed.m === 1 || i === 0) ? (String(parsed.y).slice(2) + '/') : '';
-        return '<th style="padding:4px 3px;text-align:center;font-size:8.5px;font-weight:700;color:#8C8E8F;background:#f2f0eb;white-space:nowrap">' + prefix + ML[parsed.m - 1] + '</th>';
-      }).join('');
+      const totalH    = yms.reduce((s, ym) => s + util[w][ym].alloc, 0);
+      const mthsCap   = yms.filter(ym => util[w][ym].cap > 0);
+      const avgPct    = mthsCap.length ? mthsCap.reduce((s, ym) => s + util[w][ym].pct, 0) / mthsCap.length : 0;
 
-      // Project rows
-      const projRows = projs.map(proj => {
-        const cells = yms.map(ym => {
-          const h = ppProj[w][proj]?.[ym] || 0;
-          return '<td style="padding:4px 3px;text-align:center;font-size:9px;color:#333;white-space:nowrap">' + (h > 0 ? Math.round(h) + 'h' : '') + '</td>';
+      // Abbreviated project names for column headers (max 11 chars)
+      const abbr = p => p.length > 11 ? p.slice(0, 10) + '…' : p;
+
+      // Column headers: one per project + Total + Util
+      const projThs = projs.map(p =>
+        '<th style="padding:4px 3px;text-align:right;font-size:8.5px;font-weight:700;color:#8C8E8F;background:#f2f0eb;min-width:36px;max-width:60px;white-space:nowrap" title="' + p + '">'
+        + abbr(p) + '</th>'
+      ).join('');
+
+      // Grand total per project (for tfoot)
+      const projTotals = projs.map(p => yms.reduce((s, ym) => s + (ppProj[w][p]?.[ym] || 0), 0));
+
+      // Build rows grouped by year
+      const yearSections = years.map(y => {
+        const ymsY = yms.filter(ym => ymParse(ym).y === y);
+
+        // Year header row (only when multiple years selected)
+        const yearHdr = years.length > 1
+          ? '<tr><td colspan="' + (projs.length + 3) + '" style="background:#f2f0eb;font-size:9px;font-weight:800;color:#8B2638;padding:5px 8px;letter-spacing:.06em">' + y + '</td></tr>'
+          : '';
+
+        // Month rows
+        const monthRows = ymsY.map(ym => {
+          const parsed = ymParse(ym);
+          const d      = util[w][ym];
+          const vac    = state.absences?.[w]?.[ym];
+          const mthTotal = projs.reduce((s, p) => s + (ppProj[w][p]?.[ym] || 0), 0);
+          const projCells = projs.map(p => {
+            const h = ppProj[w][p]?.[ym] || 0;
+            return '<td style="padding:3px 4px;text-align:right;font-size:9px;color:#333">' + (h > 0 ? Math.round(h) + 'h' : '') + '</td>';
+          }).join('');
+          const utilCell = d.cap > 0
+            ? '<td style="padding:3px 5px;text-align:right;font-size:9px;font-weight:600;background:' + hc(d.pct) + ';color:' + tc(d.pct) + '">'
+              + Math.round(d.pct * 100) + '%' + (vac ? ' ✈' : '') + '</td>'
+            : '<td style="padding:3px 5px;text-align:right;font-size:9px;color:#ccc">—' + (vac ? ' ✈' : '') + '</td>';
+          return '<tr>'
+            + '<td style="padding:3px 8px 3px 0;font-size:9.5px;white-space:nowrap;color:#444">' + ML[parsed.m - 1] + '</td>'
+            + projCells
+            + '<td style="padding:3px 5px;text-align:right;font-size:9.5px;font-weight:700;border-left:1px solid #e8e4dc">' + (mthTotal > 0 ? Math.round(mthTotal) + 'h' : '') + '</td>'
+            + utilCell
+            + '</tr>';
         }).join('');
-        const rowTot = yms.reduce((s, ym) => s + (ppProj[w][proj]?.[ym] || 0), 0);
-        return '<tr>'
-          + '<td style="padding:4px 8px 4px 0;font-size:9.5px;font-weight:500;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis">' + proj + '</td>'
-          + cells
-          + '<td style="padding:4px 6px;text-align:center;font-size:10px;font-weight:700;border-left:1px solid #e8e4dc">' + Math.round(rowTot) + 'h</td>'
+
+        // Year subtotal row
+        const yTotals = projs.map(p => ymsY.reduce((s, ym) => s + (ppProj[w][p]?.[ym] || 0), 0));
+        const yTotal  = ymsY.reduce((s, ym) => s + util[w][ym].alloc, 0);
+        const yCapMths = ymsY.filter(ym => util[w][ym].cap > 0);
+        const yAvg    = yCapMths.length ? yCapMths.reduce((s, ym) => s + util[w][ym].pct, 0) / yCapMths.length : 0;
+        const yTotalCells = yTotals.map(h =>
+          '<td style="padding:4px 4px;text-align:right;font-size:9px;font-weight:700;background:#f6f3ec;border-top:1px solid #ccc">' + (h > 0 ? Math.round(h) + 'h' : '') + '</td>'
+        ).join('');
+        const ySubtotal = '<tr>'
+          + '<td style="padding:4px 8px 4px 0;font-size:9px;font-weight:800;background:#f6f3ec;border-top:1px solid #ccc;color:#555">Total ' + (years.length > 1 ? y : '') + '</td>'
+          + yTotalCells
+          + '<td style="padding:4px 5px;text-align:right;font-size:9.5px;font-weight:800;background:#f6f3ec;border-left:1px solid #e8e4dc;border-top:1px solid #ccc">' + Math.round(yTotal) + 'h</td>'
+          + '<td style="padding:4px 5px;text-align:right;font-size:9.5px;font-weight:800;background:#f6f3ec;border-top:1px solid #ccc;color:' + kpiColor(yAvg) + '">' + Math.round(yAvg * 100) + '%</td>'
           + '</tr>';
+
+        return yearHdr + monthRows + ySubtotal;
       }).join('');
 
-      // Utilization footer row
-      const capCells = yms.map(ym => {
-        const d = util[w][ym];
-        const vac = state.absences?.[w]?.[ym];
-        const txt = d.cap > 0 ? Math.round(d.pct * 100) + '%' : '—';
-        return '<td style="padding:4px 3px;text-align:center;font-size:9px;background:' + hc(d.pct) + ';color:' + tc(d.pct) + ';font-weight:600;white-space:nowrap">'
-          + txt + (vac ? '<span style="font-size:7px;opacity:.85"> ✈</span>' : '') + '</td>';
-      }).join('');
+      // Grand total row (only when multiple years)
+      const grandTotalRow = years.length > 1
+        ? '<tr>'
+          + '<td style="padding:5px 8px 5px 0;font-size:9.5px;font-weight:800;border-top:2px solid #8B2638;color:#1a1917">Total</td>'
+          + projTotals.map(h => '<td style="padding:5px 4px;text-align:right;font-size:9.5px;font-weight:800;border-top:2px solid #8B2638">' + (h > 0 ? Math.round(h) + 'h' : '') + '</td>').join('')
+          + '<td style="padding:5px 5px;text-align:right;font-size:10px;font-weight:900;border-left:1px solid #e8e4dc;border-top:2px solid #8B2638">' + Math.round(totalH) + 'h</td>'
+          + '<td style="padding:5px 5px;text-align:right;font-size:10px;font-weight:900;border-top:2px solid #8B2638;color:' + kpiColor(avgPct) + '">' + Math.round(avgPct * 100) + '%</td>'
+          + '</tr>'
+        : '';
 
-      const totalH = yms.reduce((s, ym) => s + util[w][ym].alloc, 0);
-      const mthsWithCap = yms.filter(ym => util[w][ym].cap > 0);
-      const avgPct = mthsWithCap.length ? mthsWithCap.reduce((s, ym) => s + util[w][ym].pct, 0) / mthsWithCap.length : 0;
+      // Project legend (full names, in case they were truncated)
+      const needsLegend = projs.some(p => p.length > 11);
+      const legend = needsLegend
+        ? '<div style="margin-top:14px;font-size:8px;color:#8C8E8F;line-height:1.8">'
+          + '<strong style="font-size:7.5px;text-transform:uppercase;letter-spacing:.1em">Legenda</strong><br>'
+          + projs.map(p => abbr(p) + ' → ' + p).filter((_, i) => projs[i].length > 11).join(' &nbsp;·&nbsp; ')
+          + '</div>'
+        : '';
 
       return '<div class="page">'
         + pageHeader(w)
         + h2('Alocação por projecto · ' + periodLbl)
-        + '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">'
+        + '<table style="border-collapse:collapse;width:100%">'
         + '<thead><tr>'
-        + '<th style="padding:4px 8px 4px 0;font-size:9.5px;color:#8C8E8F;text-align:left">Projecto</th>'
-        + monthCols
-        + '<th style="padding:4px 6px;font-size:9px;font-weight:700;color:#8C8E8F;border-left:1px solid #e8e4dc">Total</th>'
+        + '<th style="padding:4px 8px 4px 0;font-size:9px;color:#8C8E8F;text-align:left;min-width:28px">Mês</th>'
+        + projThs
+        + '<th style="padding:4px 5px;font-size:8.5px;font-weight:700;color:#8C8E8F;border-left:1px solid #e8e4dc;text-align:right">Total</th>'
+        + '<th style="padding:4px 5px;font-size:8.5px;font-weight:700;color:#8C8E8F;background:#f2f0eb;text-align:right">Util.</th>'
         + '</tr></thead>'
-        + '<tbody>' + projRows + '</tbody>'
-        + '<tfoot><tr>'
-        + '<td style="padding:5px 8px 4px 0;font-size:9.5px;font-weight:700;border-top:1.5px solid #ccc">Utilização</td>'
-        + capCells
-        + '<td style="padding:5px 6px;text-align:center;font-size:10px;font-weight:800;border-left:1px solid #e8e4dc;border-top:1.5px solid #ccc;color:' + kpiColor(avgPct) + '">' + Math.round(avgPct * 100) + '%</td>'
-        + '</tr></tfoot></table></div>'
-        + '<div style="margin-top:12px;font-size:9.5px;color:#8C8E8F">'
-        + 'Total alocado no período: <strong style="color:#1a1917">' + Math.round(totalH) + 'h</strong>'
-        + ' &nbsp;·&nbsp; Utilização média: <strong style="color:' + kpiColor(avgPct) + '">' + Math.round(avgPct * 100) + '%</strong>'
-        + ' &nbsp;·&nbsp; ' + projs.length + ' projecto(s)'
-        + '</div>'
+        + '<tbody>' + yearSections + grandTotalRow + '</tbody>'
+        + '</table>'
+        + legend
         + '</div>';
     }).join('');
   }
