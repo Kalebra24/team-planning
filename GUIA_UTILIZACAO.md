@@ -48,8 +48,8 @@ Qualquer tentativa de edição redireccionará automaticamente para o login.
 ## 2. Cabeçalho e Navegação
 
 ```
-[Planeamento de Recursos]  [● jsilva  Sair]  [Dados ▾]  [↑ Submeter Plano]  [+ Nova Alocação]
-─────────────────────────────────────────────────────────────────────────────────────────────
+[Planeamento de Recursos]  [● jsilva  Sair]  [Dados ▾]  [↩ Desfazer]  [?]  [📊 Relatório]  [↑ Submeter Plano]  [+ Nova Alocação]
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 [Dashboard] [Alocações] [Heatmap] [Timeline] [Por Projeto] [Equipa] [Arquivo]
 ```
 
@@ -57,6 +57,8 @@ Qualquer tentativa de edição redireccionará automaticamente para o login.
 |---|---|
 | **Entrar / Sair** | Login com conta GitLab / terminar sessão |
 | **Dados ▾** | Menu de importação, exportação e diário de alterações |
+| **↩ Desfazer** | Reverte a última ação (equivalente a Ctrl+Z) |
+| **📊 Relatório** | Abre o modal de geração de relatórios PDF |
 | **↑ Submeter Plano** | Guardar snapshot do estado actual no Arquivo |
 | **+ Nova Alocação** | Criar um novo registo de alocação |
 | **Tabs** | Navegar entre as diferentes vistas |
@@ -291,7 +293,54 @@ Ao carregar um JSON tens duas opções:
 
 ### Relatório Visual
 
-**📊 Relatório Visual** — gera um relatório de 3 páginas (resumo executivo, heatmap, matriz pessoa × projecto) optimizado para impressão em PDF.
+Clica **📊 Relatório** no cabeçalho para abrir o modal de opções. Existem dois tipos de relatório:
+
+---
+
+#### 📊 Por Projecto
+
+Relatório orientado a projectos — visão de equipa para um determinado ano.
+
+**Opções:**
+- **Ano** — selecciona o ano a reportar
+- **Projectos** — filtra para um ou mais projectos específicos (todos se nenhum selecionado)
+- **Nível de detalhe:**
+  - *Completo* — 3 páginas: resumo executivo + heatmap + matriz pessoa × projecto
+  - *Executivo* — 1 página: KPIs, barras de utilização, gráfico de tendência (procura vs capacidade nos próximos 12 meses)
+
+Cada página inclui cabeçalho com logo INEGI, data de geração, quem gerou e período.
+
+---
+
+#### 👤 Por Pessoa
+
+Relatório orientado a pessoas — útil para revisões individuais ou de grupo.
+
+**Opções:**
+- **Ano(s)** — selecciona um ou mais anos (podem ser anos consecutivos)
+- **Pessoas** — selecciona as pessoas a incluir (todas se nenhuma selecionada)
+- **Nível de detalhe:**
+  - *Completo* — página de resumo + uma página de detalhe por pessoa
+  - *Resumo* — apenas a página de visão global
+
+**Página 1 — Visão global:**
+Cartão por pessoa com:
+- Utilização média, total de horas e número de projectos no período
+- Barras horizontais mês a mês mostrando **alocação vs capacidade** — a barra de fundo (cinzento) representa a capacidade; a barra preenchida (cor) representa a alocação; um segmento vermelho aparece quando excede 100%
+- % de utilização e horas exatas por mês (ex: `120/140h`)
+- Indicador ✈ quando há registo de férias SIGEI nesse mês
+
+**Páginas seguintes — Detalhe por pessoa (modo Completo):**
+Tabela com **meses como linhas** e **projectos como colunas**, garantindo que todos os dados são visíveis ao imprimir em A4:
+- Horas por projecto em cada mês
+- Coluna Total (soma dos projectos) e coluna Utilização % (com cor)
+- Linha de subtotal por ano (quando múltiplos anos seleccionados)
+- Linha de total geral no final
+- Legenda automática se algum nome de projecto foi abreviado
+
+> Projectos ocultos (🙈) não são incluídos nos relatórios. Para os incluir, vai a **Por Projeto → Catálogo** e clica **👁 Mostrar**.
+
+---
 
 ### Diário de Alterações
 **⧗ Diário de alterações** — mostra todas as modificações registadas, com o autor (username GitLab), o tipo de operação (criado / editado / eliminado) e a data/hora.

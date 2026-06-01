@@ -20,7 +20,8 @@ e regista todas as alterações com identificação do autor.
 | **Equipa** | Edição de capacidades mensais por pessoa |
 | **Arquivo** | Snapshots mensais do plano para consulta histórica |
 | **Ausências / Férias** | Importa mapa de férias SIGEI (HTML); actualiza capacidades automaticamente |
-| **Relatório Visual** | Relatório de 3 páginas imprimível: resumo, heatmap, matriz pessoa × projecto |
+| **Relatório Por Projecto** | Relatório PDF imprimível: KPIs + barras de utilização + heatmap + matriz pessoa × projecto + gráfico de tendência procura vs capacidade |
+| **Relatório Por Pessoa** | Relatório PDF por pessoa: cartões com barras alocação vs capacidade mês a mês + tabela detalhada projecto × mês (multi-ano) |
 
 ---
 
@@ -83,7 +84,7 @@ Nas visitas seguintes o login é automático (token guardado no browser).
 - **Dados → Importar Excel** — carrega um ficheiro `.xlsx` com a estrutura esperada
 - **Dados → Descarregar / Carregar JSON** — backup e restauro completo do estado
 - **Dados → 📅 Importar Mapa de Férias** — carrega o ficheiro HTML exportado do SIGEI e actualiza automaticamente as capacidades mensais (ausências reduzem a capacidade disponível a 8h/dia)
-- **Dados → 📊 Relatório Visual** — gera relatório de 3 páginas imprimível como PDF
+- **📊 Relatório** (cabeçalho) — abre modal com dois tipos de relatório PDF: *Por Projecto* (equipa, 1 ano) e *Por Pessoa* (individual ou grupo, multi-ano)
 - **Submeter Plano** — guarda um snapshot do mês no Arquivo
 
 ---
