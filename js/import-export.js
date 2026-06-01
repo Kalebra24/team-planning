@@ -602,24 +602,42 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
 
   const h2 = label => '<div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:#8C8E8F;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e8e4dc">' + label + '</div>';
 
-  // ── Utilization mini bar chart (per person, per month) ────────────────
-  const utilBars = (w) => {
-    const vals = yms.map(ym => util[w][ym].pct);
-    const W = 300, H = 28;
-    const bw = W / yms.length;
-    const bars = vals.map((v, i) => {
-      const bh = Math.min(1.25, v) * H;
-      const color = v === 0 ? '#f2f0eb' : v < 0.96 ? '#4a8f5e' : v <= 1.10 ? '#d97c10' : '#8B2638';
-      return '<rect x="' + (i * bw + 0.5).toFixed(1) + '" y="' + (H - bh).toFixed(1) + '" width="' + (bw - 1.5).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + color + '" rx="1.5"/>';
+  // ── Allocation vs capacity bars per month ────────────────────────────
+  const allocCapBars = (w) => {
+    // Group months by year so we can add a year label when multiple years
+    const rows = years.flatMap(y => {
+      const ymsY = yms.filter(ym => ymParse(ym).y === y);
+      const yearHdr = years.length > 1
+        ? '<tr><td colspan="4" style="padding:4px 0 1px;font-size:7.5px;font-weight:800;color:#8B2638;letter-spacing:.08em;text-transform:uppercase">' + y + '</td></tr>'
+        : '';
+      const mthRows = ymsY.map(ym => {
+        const parsed = ymParse(ym);
+        const d = util[w][ym];
+        const vac = state.absences?.[w]?.[ym];
+        const barPct = d.cap > 0 ? Math.min(100, Math.round(d.pct * 100)) : 0;
+        const over   = d.cap > 0 && d.pct > 1;
+        const color  = hc(d.pct);
+        const pctLbl = d.cap > 0 ? Math.round(d.pct * 100) + '%' : '—';
+        const hrsLbl = d.cap > 0 ? Math.round(d.alloc) + '/' + d.cap + 'h' : (vac ? '✈' : '');
+        return '<tr>'
+          // Month label
+          + '<td style="padding:2px 5px 2px 0;font-size:8.5px;color:#555;white-space:nowrap">' + ML[parsed.m - 1] + '</td>'
+          // Bar track
+          + '<td style="width:100%;padding:2px 0">'
+          +   '<div style="position:relative;height:10px;background:#f2f0eb;border-radius:2px;overflow:visible">'
+          +     '<div style="position:absolute;left:0;top:0;height:100%;width:' + barPct + '%;background:' + color + ';border-radius:2px;min-width:' + (d.alloc > 0 ? 2 : 0) + 'px"></div>'
+          +     (over ? '<div style="position:absolute;left:100%;top:0;height:100%;width:' + Math.min(15, Math.round((d.pct - 1) * 100)) + '%;background:#8B2638;opacity:.5;border-radius:0 2px 2px 0"></div>' : '')
+          +   '</div>'
+          + '</td>'
+          // % label
+          + '<td style="padding:2px 0 2px 5px;font-size:8px;font-weight:700;color:' + (d.pct >= 1.10 ? '#8B2638' : d.pct >= 0.96 ? '#d97c10' : d.pct >= 0.76 ? '#2d7a4a' : '#8C8E8F') + ';white-space:nowrap;text-align:right">' + pctLbl + '</td>'
+          // hours label
+          + '<td style="padding:2px 0 2px 4px;font-size:7.5px;color:#8C8E8F;white-space:nowrap;text-align:right">' + hrsLbl + (vac && d.cap > 0 ? ' ✈' : '') + '</td>'
+          + '</tr>';
+      }).join('');
+      return yearHdr + mthRows;
     }).join('');
-    // month labels (only Jan of each year + first)
-    const labels = yms.map((ym, i) => {
-      const parsed = ymParse(ym);
-      if (parsed.m !== 1 && i !== 0) return '';
-      const x = (i * bw + bw / 2).toFixed(1);
-      return '<text x="' + x + '" y="' + (H + 10) + '" text-anchor="middle" font-size="7" fill="#8C8E8F">' + (parsed.m === 1 ? String(parsed.y).slice(2) : '') + '</text>';
-    }).join('');
-    return '<svg viewBox="0 0 ' + W + ' ' + (H + 12) + '" style="width:100%;max-width:' + W + 'px;height:auto">' + bars + labels + '</svg>';
+    return '<table style="width:100%;border-collapse:collapse;margin-top:8px">' + rows + '</table>';
   };
 
   // ── Page 1: person summary cards ─────────────────────────────────────
@@ -638,8 +656,8 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
       + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + Math.round(totalH) + 'h</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Total horas</div></div>'
       + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + projs.length + '</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Projectos</div></div>'
       + '</div>'
-      + utilBars(w)
-      + (projs.length ? '<div style="font-size:8.5px;color:#8C8E8F;margin-top:6px;line-height:1.5">' + projs.slice(0, 4).join(', ') + (projs.length > 4 ? ' +' + (projs.length - 4) + ' …' : '') + '</div>' : '')
+      + allocCapBars(w)
+      + (projs.length ? '<div style="font-size:8.5px;color:#8C8E8F;margin-top:8px;line-height:1.5">' + projs.slice(0, 4).join(', ') + (projs.length > 4 ? ' +' + (projs.length - 4) + ' …' : '') + '</div>' : '')
       + '</div>';
   }).join('');
 
