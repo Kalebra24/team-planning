@@ -194,10 +194,16 @@ document.getElementById('btn-export-report').onclick = openReportModal;
 document.getElementById('modal-report-close').onclick = () => document.getElementById('modal-report').classList.remove('active');
 document.getElementById('modal-report-cancel').onclick = () => document.getElementById('modal-report').classList.remove('active');
 document.getElementById('btn-report-generate').onclick = () => {
-  const year = parseInt(document.getElementById('rpt-year').value, 10);
-  const filterProjects = [...document.querySelectorAll('#rpt-project-list input[type="checkbox"]:checked')].map(el => el.value);
   const fullReport = document.querySelector('input[name="rpt-level"]:checked')?.value !== 'exec';
-  exportMonthlyReport({ year, filterProjects, fullReport });
+  if (typeof _rptType !== 'undefined' && _rptType === 'person') {
+    const workers = [...document.querySelectorAll('#rpt-person-list input:checked')].map(el => el.value);
+    const years   = [...document.querySelectorAll('#rpt-years-list input:checked')].map(el => parseInt(el.value, 10));
+    exportPersonReport({ workers, years, fullReport });
+  } else {
+    const year = parseInt(document.getElementById('rpt-year').value, 10);
+    const filterProjects = [...document.querySelectorAll('#rpt-project-list input:checked')].map(el => el.value);
+    exportMonthlyReport({ year, filterProjects, fullReport });
+  }
 };
 
 // Ctrl+Z global para undo

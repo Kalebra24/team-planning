@@ -138,42 +138,88 @@ window.exportGanttPNG = () => {
 // RELATÓRIO VISUAL (#9)
 // ════════════════════════════════════════════════════════════════════════
 
+function _rptCheckboxList(containerId, toggleBtnId, items, labelFn) {
+  const list = document.getElementById(containerId);
+  list.innerHTML = '';
+  items.forEach(item => {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;font-size:13px;font-weight:400';
+    const val = typeof item === 'object' ? String(item.value) : String(item);
+    const lbl = labelFn ? labelFn(item) : val;
+    row.innerHTML = '<input type="checkbox" value="' + val.replace(/"/g, '&quot;') + '" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0"> ' + lbl;
+    row.addEventListener('mouseenter', () => { row.style.background = 'var(--line-soft)'; });
+    row.addEventListener('mouseleave', () => { row.style.background = ''; });
+    list.appendChild(row);
+  });
+  const btn = document.getElementById(toggleBtnId);
+  if (!btn) return;
+  btn.onclick = () => {
+    const boxes = list.querySelectorAll('input[type="checkbox"]');
+    const allChecked = [...boxes].every(b => b.checked);
+    boxes.forEach(b => { b.checked = !allChecked; });
+    btn.textContent = allChecked ? 'Selecionar todos' : 'Limpar seleção';
+  };
+  list.addEventListener('change', () => {
+    const boxes = list.querySelectorAll('input[type="checkbox"]');
+    btn.textContent = [...boxes].every(b => b.checked) ? 'Limpar seleção' : 'Selecionar todos';
+  });
+}
+
+let _rptType = 'project';
+
 function openReportModal() {
   try {
+  const curY = new Date().getFullYear();
+  const allYears = getAllYears().length ? getAllYears() : [curY];
+
+  // Project report: year dropdown
   const yearSel = document.getElementById('rpt-year');
   yearSel.innerHTML = '';
-  const curY = new Date().getFullYear();
-  const years = getAllYears().length ? getAllYears() : [curY];
-  years.slice().reverse().forEach(y => {
+  allYears.slice().reverse().forEach(y => {
     const o = document.createElement('option');
     o.value = y; o.textContent = y;
     if (y === curY) o.selected = true;
     yearSel.appendChild(o);
   });
 
-  const list = document.getElementById('rpt-project-list');
-  list.innerHTML = '';
-  [...state.projects].sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
-    const row = document.createElement('label');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;font-size:13px;font-weight:400';
-    row.innerHTML = '<input type="checkbox" value="' + p.name.replace(/"/g, '&quot;') + '" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0"> ' + p.name;
-    row.addEventListener('mouseenter', () => { row.style.background = 'var(--line-soft)'; });
-    row.addEventListener('mouseleave', () => { row.style.background = ''; });
-    list.appendChild(row);
-  });
+  // Project checkboxes
+  _rptCheckboxList('rpt-project-list', 'rpt-project-toggle-all',
+    [...state.projects].sort((a, b) => a.name.localeCompare(b.name)),
+    p => p.name + (p.hidden ? ' <span style="font-size:10px;color:var(--ink-faint)">· oculto</span>' : '')
+  );
 
-  const toggleBtn = document.getElementById('rpt-project-toggle-all');
-  toggleBtn.onclick = () => {
-    const boxes = list.querySelectorAll('input[type="checkbox"]');
-    const allChecked = [...boxes].every(b => b.checked);
-    boxes.forEach(b => { b.checked = !allChecked; });
-    toggleBtn.textContent = allChecked ? 'Selecionar todos' : 'Limpar seleção';
+  // Years checkboxes (person report)
+  _rptCheckboxList('rpt-years-list', 'rpt-years-toggle-all',
+    allYears.slice().reverse().map(y => ({ value: y })),
+    item => String(item.value)
+  );
+  // pre-check current year
+  const firstYearBox = document.querySelector('#rpt-years-list input[value="' + curY + '"]');
+  if (firstYearBox) firstYearBox.checked = true;
+
+  // People checkboxes (person report)
+  _rptCheckboxList('rpt-person-list', 'rpt-person-toggle-all',
+    [...state.workers].sort(),
+    w => w
+  );
+
+  // Type toggle wiring
+  const switchType = (type) => {
+    _rptType = type;
+    document.getElementById('rpt-opts-project').style.display = type === 'project' ? 'flex' : 'none';
+    document.getElementById('rpt-opts-person').style.display  = type === 'person'  ? 'flex' : 'none';
+    document.getElementById('rpt-type-project').classList.toggle('active', type === 'project');
+    document.getElementById('rpt-type-person').classList.toggle('active',  type === 'person');
+    document.getElementById('rpt-level-full-lbl').textContent = type === 'project'
+      ? 'Completo — 3 páginas (resumo, heatmap, projectos)'
+      : 'Completo — resumo + tabela por pessoa (1 página por pessoa)';
+    document.getElementById('rpt-level-exec-lbl').textContent = type === 'project'
+      ? 'Executivo — 1 página (resumo + tendência)'
+      : 'Resumo — 1 página (cartões por pessoa)';
   };
-  list.addEventListener('change', () => {
-    const boxes = list.querySelectorAll('input[type="checkbox"]');
-    const allChecked = [...boxes].every(b => b.checked);
-    toggleBtn.textContent = allChecked ? 'Limpar seleção' : 'Selecionar todos';
-  });
+  document.getElementById('rpt-type-project').onclick = () => switchType('project');
+  document.getElementById('rpt-type-person').onclick  = () => switchType('person');
+  switchType(_rptType);
 
   document.getElementById('modal-report').classList.add('active');
   } catch(err) { console.error('openReportModal:', err); toast('Erro ao abrir relatório: ' + err.message, 'error'); }
@@ -477,6 +523,225 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
   document.getElementById('modal-report').classList.remove('active');
   toast('Relatório gerado — usa Ctrl+P para guardar PDF');
 }
+
+function exportPersonReport({ workers: filterWorkers = [], years: filterYears = [], fullReport = true } = {}) {
+  const now = new Date();
+  const ML  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  const workers = filterWorkers.length ? filterWorkers : [...state.workers];
+  const curY    = now.getFullYear();
+  const allDataYears = getAllYears().length ? getAllYears() : [curY];
+  const years   = (filterYears.length ? filterYears : [curY]).slice().sort((a, b) => a - b);
+
+  // All months across selected years
+  const yms = years.flatMap(y => Array.from({length: 12}, (_, i) => ymKey(y, i + 1)));
+
+  // Visible records for selected workers
+  const records = visibleRecords().filter(r => workers.includes(r.worker));
+
+  // Utilization per person × month
+  const util = {};
+  for (const w of workers) {
+    util[w] = {};
+    for (const ym of yms) {
+      const cap   = getCapacity(w, ym);
+      const alloc = records.reduce((s, r) => r.worker === w ? s + (r.monthsHours?.[ym] || 0) : s, 0);
+      util[w][ym] = { cap, alloc, pct: cap > 0 ? alloc / cap : 0 };
+    }
+  }
+
+  // Project breakdown per person: {worker: {project: {ym: hours}}}
+  const ppProj = {};
+  for (const w of workers) {
+    ppProj[w] = {};
+    for (const r of records.filter(r => r.worker === w)) {
+      if (!ppProj[w][r.project]) ppProj[w][r.project] = {};
+      for (const ym of yms) {
+        const h = r.monthsHours?.[ym] || 0;
+        if (h > 0) ppProj[w][r.project][ym] = (ppProj[w][r.project][ym] || 0) + h;
+      }
+    }
+  }
+
+  // Color helpers
+  const hc = p => p === 0 ? '#f2f0eb'
+    : p < 0.26  ? '#d4eadb'
+    : p < 0.76  ? '#a3c8ad'
+    : p < 0.96  ? '#4a8f5e'
+    : p <= 1.10 ? '#d97c10'
+    : '#8B2638';
+  const tc = p => p >= 0.76 ? '#fff' : '#1a1917';
+  const kpiColor = p => p >= 1.10 ? '#8B2638' : p >= 0.96 ? '#d97c10' : p >= 0.76 ? '#2d7a4a' : '#444';
+
+  // Metadata
+  const genDate  = now.toLocaleDateString('pt-PT', {day:'2-digit', month:'long', year:'numeric'});
+  const genTime  = now.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'});
+  const genUser  = (typeof sessionCtx !== 'undefined' && sessionCtx)
+    ? (sessionCtx.displayName || sessionCtx.initials || '—') : '—';
+  const periodLbl = years.length === 1 ? String(years[0])
+    : years[0] + '–' + years[years.length - 1];
+
+  // INEGI logo
+  const logoSVG = '<svg width="108" height="40" viewBox="0 0 108 40" xmlns="http://www.w3.org/2000/svg">'
+    + '<rect width="5" height="40" fill="#8B2638"/>'
+    + '<text x="12" y="26" font-family="\'DIN Next LT Pro\',\'Segoe UI\',Arial,sans-serif" font-size="21" font-weight="800" fill="#8B2638" letter-spacing="-0.3">INEGI</text>'
+    + '<text x="12" y="37" font-family="\'Segoe UI\',Arial,sans-serif" font-size="5.8" fill="#8C8E8F" letter-spacing="0.09em">INSTITUTO · ENGENHARIA</text>'
+    + '</svg>';
+
+  // Page header helper
+  const pageHeader = (title) => ''
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #8B2638;padding-bottom:10px;margin-bottom:18px">'
+    + '<div style="display:flex;align-items:center;gap:14px">'
+    + logoSVG
+    + '<div><div style="font-size:14.5px;font-weight:800;color:#1a1917;letter-spacing:-0.3px">' + title + '</div>'
+    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">Relatório por pessoa &nbsp;·&nbsp; ' + periodLbl + '</div></div></div>'
+    + '<div style="text-align:right;font-size:9px;color:#8C8E8F;line-height:1.75">'
+    + '<div>Gerado por <strong style="color:#444">' + genUser + '</strong></div>'
+    + '<div>' + genDate + ', ' + genTime + '</div>'
+    + '</div></div>';
+
+  const h2 = label => '<div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:#8C8E8F;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e8e4dc">' + label + '</div>';
+
+  // ── Utilization mini bar chart (per person, per month) ────────────────
+  const utilBars = (w) => {
+    const vals = yms.map(ym => util[w][ym].pct);
+    const W = 300, H = 28;
+    const bw = W / yms.length;
+    const bars = vals.map((v, i) => {
+      const bh = Math.min(1.25, v) * H;
+      const color = v === 0 ? '#f2f0eb' : v < 0.96 ? '#4a8f5e' : v <= 1.10 ? '#d97c10' : '#8B2638';
+      return '<rect x="' + (i * bw + 0.5).toFixed(1) + '" y="' + (H - bh).toFixed(1) + '" width="' + (bw - 1.5).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + color + '" rx="1.5"/>';
+    }).join('');
+    // month labels (only Jan of each year + first)
+    const labels = yms.map((ym, i) => {
+      const parsed = ymParse(ym);
+      if (parsed.m !== 1 && i !== 0) return '';
+      const x = (i * bw + bw / 2).toFixed(1);
+      return '<text x="' + x + '" y="' + (H + 10) + '" text-anchor="middle" font-size="7" fill="#8C8E8F">' + (parsed.m === 1 ? String(parsed.y).slice(2) : '') + '</text>';
+    }).join('');
+    return '<svg viewBox="0 0 ' + W + ' ' + (H + 12) + '" style="width:100%;max-width:' + W + 'px;height:auto">' + bars + labels + '</svg>';
+  };
+
+  // ── Page 1: person summary cards ─────────────────────────────────────
+  const cols = Math.min(workers.length, 3);
+  const cards = workers.map(w => {
+    const totalH = yms.reduce((s, ym) => s + util[w][ym].alloc, 0);
+    const mthsWithCap = yms.filter(ym => util[w][ym].cap > 0);
+    const avgPct = mthsWithCap.length
+      ? mthsWithCap.reduce((s, ym) => s + util[w][ym].pct, 0) / mthsWithCap.length : 0;
+    const projs = Object.keys(ppProj[w]).sort();
+    const color = kpiColor(avgPct);
+    return '<div style="border:1px solid #e8e4dc;border-radius:8px;padding:14px;break-inside:avoid;border-top:3px solid ' + (avgPct >= 1.10 ? '#8B2638' : avgPct >= 0.96 ? '#d97c10' : '#4a8f5e') + '">'
+      + '<div style="font-size:13px;font-weight:700;color:#1a1917;margin-bottom:10px">' + w + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:10px">'
+      + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:' + color + ';line-height:1">' + Math.round(avgPct * 100) + '%</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Util. média</div></div>'
+      + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + Math.round(totalH) + 'h</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Total horas</div></div>'
+      + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + projs.length + '</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Projectos</div></div>'
+      + '</div>'
+      + utilBars(w)
+      + (projs.length ? '<div style="font-size:8.5px;color:#8C8E8F;margin-top:6px;line-height:1.5">' + projs.slice(0, 4).join(', ') + (projs.length > 4 ? ' +' + (projs.length - 4) + ' …' : '') + '</div>' : '')
+      + '</div>';
+  }).join('');
+
+  const page1 = '<div class="page">'
+    + pageHeader('Relatório por Pessoa — ' + periodLbl)
+    + h2('Visão global')
+    + '<div style="display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:12px">' + cards + '</div>'
+    + '<div style="margin-top:18px;font-size:9px;color:#8C8E8F;display:flex;gap:14px;flex-wrap:wrap">'
+    + [['#f2f0eb','0%'],['#a3c8ad','≤75%'],['#4a8f5e','76–95%'],['#d97c10','96–110%'],['#8B2638','>110%']].map(
+        ([c, l]) => '<span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + c + '"></span>' + l + '</span>'
+      ).join('')
+    + '</div>'
+    + '</div>';
+
+  // ── Pages 2+: detail per person ───────────────────────────────────────
+  let detailPages = '';
+  if (fullReport) {
+    detailPages = workers.map(w => {
+      const projs = Object.keys(ppProj[w]).sort();
+      if (!projs.length) return '';
+
+      // Month column headers — show year prefix on Jan
+      const monthCols = yms.map((ym, i) => {
+        const parsed = ymParse(ym);
+        const prefix = (parsed.m === 1 || i === 0) ? (String(parsed.y).slice(2) + '/') : '';
+        return '<th style="padding:4px 3px;text-align:center;font-size:8.5px;font-weight:700;color:#8C8E8F;background:#f2f0eb;white-space:nowrap">' + prefix + ML[parsed.m - 1] + '</th>';
+      }).join('');
+
+      // Project rows
+      const projRows = projs.map(proj => {
+        const cells = yms.map(ym => {
+          const h = ppProj[w][proj]?.[ym] || 0;
+          return '<td style="padding:4px 3px;text-align:center;font-size:9px;color:#333;white-space:nowrap">' + (h > 0 ? Math.round(h) + 'h' : '') + '</td>';
+        }).join('');
+        const rowTot = yms.reduce((s, ym) => s + (ppProj[w][proj]?.[ym] || 0), 0);
+        return '<tr>'
+          + '<td style="padding:4px 8px 4px 0;font-size:9.5px;font-weight:500;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis">' + proj + '</td>'
+          + cells
+          + '<td style="padding:4px 6px;text-align:center;font-size:10px;font-weight:700;border-left:1px solid #e8e4dc">' + Math.round(rowTot) + 'h</td>'
+          + '</tr>';
+      }).join('');
+
+      // Utilization footer row
+      const capCells = yms.map(ym => {
+        const d = util[w][ym];
+        const vac = state.absences?.[w]?.[ym];
+        const txt = d.cap > 0 ? Math.round(d.pct * 100) + '%' : '—';
+        return '<td style="padding:4px 3px;text-align:center;font-size:9px;background:' + hc(d.pct) + ';color:' + tc(d.pct) + ';font-weight:600;white-space:nowrap">'
+          + txt + (vac ? '<span style="font-size:7px;opacity:.85"> ✈</span>' : '') + '</td>';
+      }).join('');
+
+      const totalH = yms.reduce((s, ym) => s + util[w][ym].alloc, 0);
+      const mthsWithCap = yms.filter(ym => util[w][ym].cap > 0);
+      const avgPct = mthsWithCap.length ? mthsWithCap.reduce((s, ym) => s + util[w][ym].pct, 0) / mthsWithCap.length : 0;
+
+      return '<div class="page">'
+        + pageHeader(w)
+        + h2('Alocação por projecto · ' + periodLbl)
+        + '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">'
+        + '<thead><tr>'
+        + '<th style="padding:4px 8px 4px 0;font-size:9.5px;color:#8C8E8F;text-align:left">Projecto</th>'
+        + monthCols
+        + '<th style="padding:4px 6px;font-size:9px;font-weight:700;color:#8C8E8F;border-left:1px solid #e8e4dc">Total</th>'
+        + '</tr></thead>'
+        + '<tbody>' + projRows + '</tbody>'
+        + '<tfoot><tr>'
+        + '<td style="padding:5px 8px 4px 0;font-size:9.5px;font-weight:700;border-top:1.5px solid #ccc">Utilização</td>'
+        + capCells
+        + '<td style="padding:5px 6px;text-align:center;font-size:10px;font-weight:800;border-left:1px solid #e8e4dc;border-top:1.5px solid #ccc;color:' + kpiColor(avgPct) + '">' + Math.round(avgPct * 100) + '%</td>'
+        + '</tr></tfoot></table></div>'
+        + '<div style="margin-top:12px;font-size:9.5px;color:#8C8E8F">'
+        + 'Total alocado no período: <strong style="color:#1a1917">' + Math.round(totalH) + 'h</strong>'
+        + ' &nbsp;·&nbsp; Utilização média: <strong style="color:' + kpiColor(avgPct) + '">' + Math.round(avgPct * 100) + '%</strong>'
+        + ' &nbsp;·&nbsp; ' + projs.length + ' projecto(s)'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  const html = '<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">'
+    + '<title>Relatório por Pessoa · ' + periodLbl + '</title>'
+    + '<style>'
+    + '*{box-sizing:border-box;margin:0;padding:0}'
+    + 'body{font-family:\'DIN Next LT Pro\',\'Segoe UI\',system-ui,Arial,sans-serif;color:#1a1917;background:#f0ede6;print-color-adjust:exact;-webkit-print-color-adjust:exact}'
+    + '.page{width:210mm;max-width:210mm;margin:0 auto 24px;background:#fff;padding:13mm 15mm;min-height:270mm}'
+    + 'table{border-collapse:collapse}'
+    + '.print-btn{position:fixed;bottom:24px;right:24px;background:#8B2638;color:#fff;border:none;padding:11px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(139,38,56,.35);z-index:99;letter-spacing:.02em}'
+    + '.print-btn:hover{background:#6e1f2c}'
+    + '@media print{body{background:#fff}.print-btn{display:none!important}.page{margin:0;padding:10mm 14mm;page-break-after:always;min-height:unset}.page:last-child{page-break-after:auto}}'
+    + '</style></head><body>'
+    + '<button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>'
+    + page1 + detailPages
+    + '</body></html>';
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Permite popups para este site e tenta novamente', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
+  document.getElementById('modal-report').classList.remove('active');
+  toast('Relatório por pessoa gerado — usa Ctrl+P para guardar PDF');
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // DOWNLOAD / UPLOAD JSON
 // ════════════════════════════════════════════════════════════════════════

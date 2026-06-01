@@ -966,31 +966,61 @@
 
 <!-- modal report options -->
 <div class="modal-bg" id="modal-report">
-  <div class="modal" style="max-width:440px">
+  <div class="modal" style="max-width:460px">
     <div class="modal-head">
-      <div class="modal-title">📊 Gerar Relatório Visual</div>
+      <div class="modal-title">Gerar Relatório</div>
       <button class="close-btn" id="modal-report-close">×</button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:14px;padding-top:4px">
-      <div class="field">
-        <label>Ano</label>
-        <select id="rpt-year" style="width:110px"></select>
+    <div style="display:flex;flex-direction:column;gap:16px;padding-top:4px">
+
+      <!-- type toggle -->
+      <div class="seg" style="width:100%">
+        <button type="button" id="rpt-type-project" class="active" style="flex:1">📊 Por Projecto</button>
+        <button type="button" id="rpt-type-person" style="flex:1">👤 Por Pessoa</button>
       </div>
-      <div class="field">
-        <label style="display:flex;justify-content:space-between;align-items:baseline">
-          <span>Projectos <span style="font-size:11px;color:var(--ink-faint)">(todos se nenhum selecionado)</span></span>
-          <button type="button" id="rpt-project-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
-        </label>
-        <div id="rpt-project-list" style="max-height:130px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
+
+      <!-- project options -->
+      <div id="rpt-opts-project" style="display:flex;flex-direction:column;gap:14px">
+        <div class="field">
+          <label>Ano</label>
+          <select id="rpt-year" style="width:110px"></select>
+        </div>
+        <div class="field">
+          <label style="display:flex;justify-content:space-between;align-items:baseline">
+            <span>Projectos <span style="font-size:11px;color:var(--ink-faint)">(todos se nenhum selecionado)</span></span>
+            <button type="button" id="rpt-project-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
+          </label>
+          <div id="rpt-project-list" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
+        </div>
       </div>
+
+      <!-- person options -->
+      <div id="rpt-opts-person" style="display:none;flex-direction:column;gap:14px">
+        <div class="field">
+          <label style="display:flex;justify-content:space-between;align-items:baseline">
+            <span>Ano(s)</span>
+            <button type="button" id="rpt-years-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
+          </label>
+          <div id="rpt-years-list" style="max-height:80px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
+        </div>
+        <div class="field">
+          <label style="display:flex;justify-content:space-between;align-items:baseline">
+            <span>Pessoas <span style="font-size:11px;color:var(--ink-faint)">(todas se nenhuma selecionada)</span></span>
+            <button type="button" id="rpt-person-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
+          </label>
+          <div id="rpt-person-list" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
+        </div>
+      </div>
+
+      <!-- detail level (shared) -->
       <div class="field">
         <label>Nível de detalhe</label>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer">
-            <input type="radio" name="rpt-level" value="full" checked> Completo — 3 páginas (resumo, heatmap, projectos)
+            <input type="radio" name="rpt-level" value="full" checked> <span id="rpt-level-full-lbl">Completo — 3 páginas (resumo, heatmap, projectos)</span>
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer">
-            <input type="radio" name="rpt-level" value="exec"> Executivo — 1 página (resumo + tendência)
+            <input type="radio" name="rpt-level" value="exec"> <span id="rpt-level-exec-lbl">Executivo — 1 página (resumo + tendência)</span>
           </label>
         </div>
       </div>
