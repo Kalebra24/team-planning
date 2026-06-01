@@ -16,7 +16,7 @@ e regista todas as alterações com identificação do autor.
 | **Alocações** | Tabela CRUD — pessoa, projeto, WP, tarefa, datas, horas |
 | **Heatmap** | Mapa de calor utilização × mês (5 níveis de cor) |
 | **Timeline** | Gantt arrastável e redimensionável por pessoa |
-| **Por Projeto** | Resumo de horas e PM por projeto e mês |
+| **Por Projeto** | Resumo de horas e PM por projeto e mês; catálogo com toggles ativo/inativo e oculto/visível |
 | **Equipa** | Edição de capacidades mensais por pessoa |
 | **Arquivo** | Snapshots mensais do plano para consulta histórica |
 | **Ausências / Férias** | Importa mapa de férias SIGEI (HTML); actualiza capacidades automaticamente |
@@ -117,7 +117,7 @@ o valor líquido é guardado directamente em `state.capacity[pessoa][YYYY-MM]`.
 ```json
 {
   "workers":   ["Nome Apelido", ...],
-  "projects":  [{ "name": "...", "active": true }, ...],
+  "projects":  [{ "name": "...", "active": true, "hidden": false }, ...],
   "records":   [{ "id": "rec_...", "worker": "...", "project": "...",
                   "start": "YYYY-MM", "end": "YYYY-MM",
                   "totalHours": 0, "monthsHours": {"YYYY-MM": 0} }],
@@ -131,6 +131,10 @@ o valor líquido é guardado directamente em `state.capacity[pessoa][YYYY-MM]`.
 
 > **Nota:** `capacity[pessoa][YYYY-MM]` guarda sempre o valor **líquido** (após dedução de férias).
 > O campo `absences` é referência — a capacidade efectiva já está em `capacity`.
+>
+> **Estados de projecto:** `active: false` exclui o projecto dos dropdowns de nova alocação.
+> `hidden: true` exclui as alocações de todas as vistas e métricas (Dashboard, Heatmap, Gantt, Relatório)
+> sem apagar dados — útil para planeamento provisório de novos projectos.
 
 ---
 

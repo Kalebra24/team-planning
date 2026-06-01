@@ -197,8 +197,21 @@ Tabela cruzada com as horas planeadas de cada pessoa em cada projecto, no perío
 Lista de todos os projectos.
 
 - **Activar/desactivar projecto** — clica no nome. Projectos inactivos não aparecem nos dropdowns de nova alocação.
+- **Ocultar/mostrar projecto** — botão **🙈 Ocultar / 👁 Mostrar** em cada linha. As alocações ficam guardadas mas são excluídas de todas as vistas e métricas enquanto o projecto estiver oculto.
 - **Adicionar projecto** — escreve o nome no campo e clica **+ Adicionar**
 - **Eliminar projecto** — ícone 🗑️ (pede confirmação extra se o projecto tiver alocações associadas)
+
+> **Diferença entre inativo e oculto**
+>
+> | Estado | Aparece nos dropdowns | Alocações contam nas métricas |
+> |---|---|---|
+> | Ativo | ✅ | ✅ |
+> | Inativo | ❌ | ✅ |
+> | Oculto | ✅ | ❌ |
+>
+> Usa **oculto** para projectos em planeamento provisório — as alocações ficam registadas mas não distorcem as métricas da equipa. Quando o projecto for confirmado, clica **👁 Mostrar** para as incluir novamente.
+
+Quando há projectos ocultos, aparece um aviso amarelo no **Dashboard** e no **Heatmap** com um atalho para gerir os projectos.
 
 ---
 
