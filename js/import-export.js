@@ -165,7 +165,8 @@ function _rptCheckboxList(containerId, toggleBtnId, items, labelFn) {
   });
 }
 
-let _rptType = 'project';
+let _rptType  = 'project';
+let _rptGroup = 'project'; // 'project' | 'wp' | 'task'
 
 function openReportModal() {
   try {
@@ -220,6 +221,18 @@ function openReportModal() {
   document.getElementById('rpt-type-project').onclick = () => switchType('project');
   document.getElementById('rpt-type-person').onclick  = () => switchType('person');
   switchType(_rptType);
+
+  // GroupBy toggle wiring
+  const switchGroup = (g) => {
+    _rptGroup = g;
+    ['project', 'wp', 'task'].forEach(id =>
+      document.getElementById('rpt-group-' + id).classList.toggle('active', id === g)
+    );
+  };
+  document.getElementById('rpt-group-project').onclick = () => switchGroup('project');
+  document.getElementById('rpt-group-wp').onclick      = () => switchGroup('wp');
+  document.getElementById('rpt-group-task').onclick    = () => switchGroup('task');
+  switchGroup(_rptGroup);
 
   document.getElementById('modal-report').classList.add('active');
   } catch(err) { console.error('openReportModal:', err); toast('Erro ao abrir relatório: ' + err.message, 'error'); }
@@ -524,7 +537,7 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
   toast('Relatório gerado — usa Ctrl+P para guardar PDF');
 }
 
-function exportPersonReport({ workers: filterWorkers = [], years: filterYears = [], fullReport = true } = {}) {
+function exportPersonReport({ workers: filterWorkers = [], years: filterYears = [], fullReport = true, groupBy = 'project' } = {}) {
   const now = new Date();
   const ML  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -550,15 +563,25 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
     }
   }
 
-  // Project breakdown per person: {worker: {project: {ym: hours}}}
+  // Key function based on grouping level
+  const groupKey = r => {
+    const base = r.project;
+    if (groupBy === 'project') return base;
+    const withWP = base + (r.wp   ? ' · ' + r.wp   : '');
+    if (groupBy === 'wp')      return withWP;
+    return withWP + (r.task ? ' · ' + r.task : '');
+  };
+
+  // Breakdown per person: {worker: {key: {ym: hours}}}
   const ppProj = {};
   for (const w of workers) {
     ppProj[w] = {};
     for (const r of records.filter(r => r.worker === w)) {
-      if (!ppProj[w][r.project]) ppProj[w][r.project] = {};
+      const key = groupKey(r);
+      if (!ppProj[w][key]) ppProj[w][key] = {};
       for (const ym of yms) {
         const h = r.monthsHours?.[ym] || 0;
-        if (h > 0) ppProj[w][r.project][ym] = (ppProj[w][r.project][ym] || 0) + h;
+        if (h > 0) ppProj[w][key][ym] = (ppProj[w][key][ym] || 0) + h;
       }
     }
   }
@@ -594,7 +617,7 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
     + '<div style="display:flex;align-items:center;gap:14px">'
     + logoSVG
     + '<div><div style="font-size:14.5px;font-weight:800;color:#1a1917;letter-spacing:-0.3px">' + title + '</div>'
-    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">Relatório por pessoa &nbsp;·&nbsp; ' + periodLbl + '</div></div></div>'
+    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">Relatório por pessoa &nbsp;·&nbsp; ' + periodLbl + ' &nbsp;·&nbsp; detalhe: ' + ({project:'projecto',wp:'WP',task:'tarefa'}[groupBy]) + '</div></div></div>'
     + '<div style="text-align:right;font-size:9px;color:#8C8E8F;line-height:1.75">'
     + '<div>Gerado por <strong style="color:#444">' + genUser + '</strong></div>'
     + '<div>' + genDate + ', ' + genTime + '</div>'
