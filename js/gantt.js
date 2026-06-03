@@ -379,6 +379,8 @@ function openRedistDialog(rec, newStartYM, newEndYM, newWorker, redrawFn) {
 const ganttRange = { from: null, to: null };
 // Modo de visualização da timeline: 'compact' (default) ou 'monthly' (com inputs por mês)
 const ganttView = { mode: 'compact', unit: 'pm' };  // unit: 'pm' | 'h'
+// Agrupamento: 'task' = por registo (default), 'wp' = por projecto·WP, 'project' = por projecto
+let ganttGroupBy = 'task';
 
 function defaultGanttRange() {
   // Se há registos, range = min/max dos meses com horas, limitado a ~24 meses
@@ -625,6 +627,37 @@ function renderGantt() {
       return ymsRange.some(ym => r.monthsHours[ym]);
     });
 
+    // Aggregate records when groupBy !== 'task'
+    const groupKey = r => {
+      if (ganttGroupBy === 'project') return r.worker + '\x00' + r.project;
+      if (ganttGroupBy === 'wp')      return r.worker + '\x00' + r.project + (r.wp ? ' · ' + r.wp : '');
+      return null; // task level — no aggregation
+    };
+
+    let drawRecords = filtered;
+    if (ganttGroupBy !== 'task') {
+      const groups = {};
+      for (const r of filtered) {
+        const k = groupKey(r);
+        if (!groups[k]) {
+          groups[k] = {
+            id: '_grp_' + k,
+            worker: r.worker,
+            project: ganttGroupBy === 'project' ? r.project : r.project + (r.wp ? ' · ' + r.wp : ''),
+            wp: '', task: '',
+            monthsHours: {},
+            _grouped: true,
+            _records: [],
+          };
+        }
+        groups[k]._records.push(r);
+        for (const [ym, h] of Object.entries(r.monthsHours || {})) {
+          groups[k].monthsHours[ym] = (groups[k].monthsHours[ym] || 0) + h;
+        }
+      }
+      drawRecords = Object.values(groups);
+    }
+
     // Info do filtro
     const totalInRange = state.records.filter(r => !hiddenProjects.has(r.project) && ymsRange.some(ym => r.monthsHours[ym])).length;
     const rangeLabel = nCols === 1 ? ymLabel(from) : `${ymLabel(from)} → ${ymLabel(to)} · ${nCols} meses`;
@@ -651,7 +684,7 @@ function renderGantt() {
     </div>`;
 
     const byWorker = {};
-    for (const r of filtered) {
+    for (const r of drawRecords) {
       if (!byWorker[r.worker]) byWorker[r.worker] = [];
       byWorker[r.worker].push(r);
     }
@@ -725,9 +758,14 @@ function renderGantt() {
           : tipBase + '\n\nArrasta para mover/redimensionar · clica para editar';
         const hideName = width < 8;
         const safeWr = r.worker.replace(/"/g,'&quot;');
+        const isGrouped = !!r._grouped;
 
         let barInner;
-        if (isMonthly) {
+        if (isGrouped) {
+          const compactLabel = ganttView.unit === 'h' ? `${round2(hRange)}h` : `${pmDisplay} PM`;
+          barInner = `${hideName ? '' : `<span class="gb-name">${label}</span>`}
+            <span class="gb-pm">${compactLabel}</span>`;
+        } else if (isMonthly) {
           const cells = monthsActive.map(ym => {
             const h = r.monthsHours[ym] || 0;
             const cap = getCapacity(r.worker, ym);
@@ -750,9 +788,11 @@ function renderGantt() {
             <div class="gb-handle gb-h-right" data-handle="right"></div>`;
         }
 
+        const barDataId = isGrouped ? '' : `data-id="${r.id}"`;
+        const barStyle = `left:${left}%; width:${width}%; background:${colorFor(r.project)}${isGrouped ? ';opacity:0.88;cursor:default' : ''}`;
         html += `<div class="gantt-row"><div class="gantt-label">${r.project}${r.wp ? ' · ' + r.wp : ''}</div>
           <div class="gantt-track" data-worker="${safeWr}" style="--cols:${nCols}">
-            <div class="gantt-bar" data-id="${r.id}" style="left:${left}%; width:${width}%; background:${colorFor(r.project)}" title="${tip.replace(/"/g,'&quot;')}">
+            <div class="gantt-bar" ${barDataId} style="${barStyle}" title="${tip.replace(/"/g,'&quot;')}">
               ${barInner}
             </div>
           </div>
@@ -764,7 +804,8 @@ function renderGantt() {
     if (isMonthly) {
       bindMonthlyInputs(draw);
       document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
-        attachBarInteractions(bar, ymsRange, null, draw); // enables right-resize via gb-month-resize
+        if (!bar.dataset.id) return; // grouped bar — no interactions
+        attachBarInteractions(bar, ymsRange, null, draw);
         bar.addEventListener('click', e => {
           if (e.target.closest('input, .gb-month-cell, .gb-month-resize')) return;
           const rec = state.records.find(x => x.id === bar.dataset.id);
@@ -773,6 +814,7 @@ function renderGantt() {
       });
     } else {
       document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
+        if (!bar.dataset.id) return; // grouped bar — no interactions
         attachBarInteractions(bar, ymsRange, null, draw);
       });
     }
@@ -855,6 +897,23 @@ function renderGantt() {
       if (b.dataset.unit === ganttView.unit) return;
       ganttView.unit = b.dataset.unit;
       unitSeg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.unit === ganttView.unit));
+      draw();
+    };
+  });
+
+  // Segmented group toggle (Tarefa / WP / Projecto)
+  const groupSeg = document.getElementById('gantt-group-seg');
+  groupSeg.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.group === ganttGroupBy);
+    b.onclick = () => {
+      if (b.dataset.group === ganttGroupBy) return;
+      ganttGroupBy = b.dataset.group;
+      groupSeg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.group === ganttGroupBy));
+      // monthly mode only makes sense at task level
+      if (ganttGroupBy !== 'task' && ganttView.mode === 'monthly') {
+        ganttView.mode = 'compact';
+        document.getElementById('gantt-show-monthly').checked = false;
+      }
       draw();
     };
   });
