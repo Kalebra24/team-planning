@@ -598,7 +598,7 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
     + '<div style="display:flex;align-items:center;gap:14px">'
     + logoSVG
     + '<div><div style="font-size:14.5px;font-weight:800;color:#1a1917;letter-spacing:-0.3px">' + title + '</div>'
-    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">Relatório por pessoa &nbsp;·&nbsp; ' + periodLbl + ' &nbsp;·&nbsp; detalhe: ' + ({project:'projecto',wp:'WP',task:'tarefa'}[groupBy]) + '</div></div></div>'
+    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">Relatório por pessoa &nbsp;·&nbsp; ' + periodLbl + '</div></div></div>'
     + '<div style="text-align:right;font-size:9px;color:#8C8E8F;line-height:1.75">'
     + '<div>Gerado por <strong style="color:#444">' + genUser + '</strong></div>'
     + '<div>' + genDate + ', ' + genTime + '</div>'
@@ -661,6 +661,87 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
       + '</svg>';
   };
 
+  // ── Allocation vs capacity bar table per person ──────────────────────
+  const allocCapBars = (w) => {
+    const rows = years.flatMap(y => {
+      const ymsY = yms.filter(ym => ymParse(ym).y === y);
+      const yearHdr = years.length > 1
+        ? '<tr><td colspan="4" style="padding:4px 0 1px;font-size:7.5px;font-weight:800;color:#8B2638;letter-spacing:.08em;text-transform:uppercase">' + y + '</td></tr>'
+        : '';
+      const mthRows = ymsY.map(ym => {
+        const parsed = ymParse(ym);
+        const d   = util[w][ym];
+        const vac = state.absences?.[w]?.[ym];
+        const barPct = d.cap > 0 ? Math.min(100, Math.round(d.pct * 100)) : 0;
+        const over   = d.cap > 0 && d.pct > 1;
+        const pctLbl = d.cap > 0 ? Math.round(d.pct * 100) + '%' : '—';
+        const hrsLbl = d.cap > 0 ? Math.round(d.alloc) + '/' + d.cap + 'h' : (vac ? '✈' : '');
+        return '<tr>'
+          + '<td style="padding:2px 5px 2px 0;font-size:8.5px;color:#555;white-space:nowrap">' + ML[parsed.m - 1] + '</td>'
+          + '<td style="width:100%;padding:2px 0"><div style="position:relative;height:10px;background:#f2f0eb;border-radius:2px;overflow:visible">'
+          +   '<div style="position:absolute;left:0;top:0;height:100%;width:' + barPct + '%;background:' + hc(d.pct) + ';border-radius:2px;min-width:' + (d.alloc > 0 ? 2 : 0) + 'px"></div>'
+          +   (over ? '<div style="position:absolute;left:100%;top:0;height:100%;width:' + Math.min(15, Math.round((d.pct - 1) * 100)) + '%;background:#8B2638;opacity:.5;border-radius:0 2px 2px 0"></div>' : '')
+          + '</div></td>'
+          + '<td style="padding:2px 0 2px 5px;font-size:8px;font-weight:700;color:' + (d.pct >= 1.10 ? '#8B2638' : d.pct >= 0.96 ? '#d97c10' : d.pct >= 0.76 ? '#2d7a4a' : '#8C8E8F') + ';white-space:nowrap;text-align:right">' + pctLbl + '</td>'
+          + '<td style="padding:2px 0 2px 4px;font-size:7.5px;color:#8C8E8F;white-space:nowrap;text-align:right">' + hrsLbl + (vac && d.cap > 0 ? ' ✈' : '') + '</td>'
+          + '</tr>';
+      }).join('');
+      return yearHdr + mthRows;
+    }).join('');
+    return '<table style="width:100%;border-collapse:collapse;margin-top:8px">' + rows + '</table>';
+  };
+
+  // ── Combined line chart: all selected people on shared axes ──────────
+  const PERSON_COLORS = ['#8B2638','#4a6741','#b8860b','#6b7c8e','#8e6b3a','#a64b76','#7a5f4a','#5d8c7e','#9c6b2f','#445f7a'];
+  const combinedLineSVG = () => {
+    const maxVal = Math.max(1, ...workers.flatMap(w => yms.map(ym => util[w][ym].alloc)));
+    const W = 560, H = 160;
+    const PAD = { top: 14, right: 16, bottom: 28, left: 40 };
+    const cW = W - PAD.left - PAD.right;
+    const cH = H - PAD.top - PAD.bottom;
+    const xStep  = yms.length > 1 ? cW / (yms.length - 1) : cW;
+    const yScale = v => cH * (1 - v / (maxVal * 1.05));
+
+    // Grid
+    let grid = '';
+    const tickStep = Math.ceil(maxVal * 1.05 / 4 / 50) * 50 || 50;
+    for (let v = 0; v <= maxVal * 1.1; v += tickStep) {
+      const y = PAD.top + yScale(v);
+      if (y < PAD.top - 2) break;
+      grid += '<line x1="' + PAD.left + '" x2="' + (W - PAD.right) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="#e8e4dc" stroke-width="1"/>';
+      grid += '<text x="' + (PAD.left - 4) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="#8C8E8F">' + Math.round(v) + 'h</text>';
+    }
+
+    // X labels
+    const xLabels = yms.map((ym, i) => {
+      const parsed = ymParse(ym);
+      if (yms.length > 12 && i % 2 !== 0) return '';
+      const x = (PAD.left + i * xStep).toFixed(1);
+      const lbl = (parsed.m === 1 || i === 0) ? ML[parsed.m - 1] + '\'' + String(parsed.y).slice(2) : ML[parsed.m - 1];
+      return '<text x="' + x + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="#8C8E8F">' + lbl + '</text>';
+    }).join('');
+
+    // One line per person
+    const lines = workers.map((w, wi) => {
+      const color = PERSON_COLORS[wi % PERSON_COLORS.length];
+      const pts   = yms.map((ym, i) => [PAD.left + i * xStep, PAD.top + yScale(util[w][ym].alloc)]);
+      const d     = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      return '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+    }).join('');
+
+    // Legend
+    const legend = workers.map((w, wi) => {
+      const color = PERSON_COLORS[wi % PERSON_COLORS.length];
+      const x = PAD.left + wi * 90;
+      if (x > W - 80) return '';
+      return '<rect x="' + x + '" y="' + (PAD.top + 2) + '" width="14" height="3" fill="' + color + '" rx="1"/>'
+        + '<text x="' + (x + 18) + '" y="' + (PAD.top + 7) + '" font-size="8" fill="#444">' + (w.split(' ')[0]) + '</text>';
+    }).join('');
+
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;height:auto">'
+      + grid + lines + legend + xLabels + '</svg>';
+  };
+
   // ── Page 1: person summary cards ─────────────────────────────────────
   const cols = Math.min(workers.length, 3);
   const cards = workers.map(w => {
@@ -677,7 +758,7 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
       + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + Math.round(totalH) + 'h</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Total horas</div></div>'
       + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + projs.length + '</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Projectos</div></div>'
       + '</div>'
-      + allocLineSVG(w)
+      + allocCapBars(w)
       + (projs.length ? '<div style="font-size:8.5px;color:#8C8E8F;margin-top:8px;line-height:1.5">' + projs.slice(0, 4).join(', ') + (projs.length > 4 ? ' +' + (projs.length - 4) + ' …' : '') + '</div>' : '')
       + '</div>';
   }).join('');
@@ -686,11 +767,12 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
     + pageHeader('Relatório por Pessoa — ' + periodLbl)
     + h2('Visão global')
     + '<div style="display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:12px">' + cards + '</div>'
-    + '<div style="margin-top:18px;font-size:9px;color:#8C8E8F;display:flex;gap:14px;flex-wrap:wrap">'
+    + '<div style="margin-top:10px;font-size:9px;color:#8C8E8F;display:flex;gap:14px;flex-wrap:wrap">'
     + [['#f2f0eb','0%'],['#a3c8ad','≤75%'],['#4a8f5e','76–95%'],['#d97c10','96–110%'],['#8B2638','>110%']].map(
         ([c, l]) => '<span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + c + '"></span>' + l + '</span>'
       ).join('')
     + '</div>'
+    + (workers.length > 1 ? h2('Alocação comparada — todas as pessoas') + combinedLineSVG() : '')
     + '</div>';
 
   // ── Pages 2+: detail per person (transposed: rows=months, cols=projects) ─
