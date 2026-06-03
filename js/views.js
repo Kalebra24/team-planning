@@ -15,7 +15,7 @@ document.getElementById('tabs').addEventListener('click', e => {
 function renderView(name) {
   switch (name) {
     case 'dashboard': renderDashboard(); break;
-    case 'alocacoes': renderRecords(); break;
+
     case 'heatmap': renderHeatmap(); break;
     case 'gantt': renderGantt(); break;
     case 'projetos': renderProjects(); break;
@@ -90,7 +90,7 @@ function renderDashboard() {
       <div class="stat-sub">${utilCount} pessoa(s) com capacidade definida</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Em risco de lacuna (próx. 3 meses)</div>
+      <div class="stat-label">com baixa alocação (próx. 3 meses)</div>
       <div class="stat-value ${gapWorkers.length > 0 ? 'warn' : 'ok'}">${gapWorkers.length}</div>
       <div class="stat-sub">${gapWorkers.length > 0 ? gapWorkers.slice(0,2).join(', ') + (gapWorkers.length > 2 ? ` +${gapWorkers.length-2}` : '') : 'equipa coberta'}</div>
     </div>
@@ -230,67 +230,6 @@ function renderBarChart(year, month = 0) {
       </div>`;
   }).join('');
 }
-
-
-// ════════════════════════════════════════════════════════════════════════
-// RECORDS TABLE
-// ════════════════════════════════════════════════════════════════════════
-function renderRecords() {
-  const search = document.getElementById('search').value.toLowerCase();
-  const fw = document.getElementById('filter-worker').value;
-  const fp = document.getElementById('filter-project').value;
-
-  // Popular filtros (uma vez)
-  const fwSel = document.getElementById('filter-worker');
-  if (fwSel.options.length <= 1) {
-    state.workers.forEach(w => fwSel.add(new Option(w, w)));
-  }
-  const fpSel = document.getElementById('filter-project');
-  if (fpSel.options.length <= 1) {
-    const projs = [...new Set(state.records.map(r => r.project))].sort();
-    projs.forEach(p => fpSel.add(new Option(p, p)));
-  }
-
-  let rows = visibleRecords();
-  if (fw) rows = rows.filter(r => r.worker === fw);
-  if (fp) rows = rows.filter(r => r.project === fp);
-  if (search) {
-    rows = rows.filter(r =>
-      (r.worker||'').toLowerCase().includes(search) ||
-      (r.project||'').toLowerCase().includes(search) ||
-      (r.task||'').toLowerCase().includes(search) ||
-      (r.wp||'').toString().toLowerCase().includes(search)
-    );
-  }
-
-  rows = rows.sort((a,b) => (a.worker+a.project+a.start).localeCompare(b.worker+b.project+b.start));
-
-  document.getElementById('rec-count').textContent = rows.length;
-  const tbody = document.querySelector('#table-records tbody');
-  if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="display">Sem registos</div><div>Clica em + Nova Alocação para começar</div></div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td><strong>${r.worker}</strong></td>
-      <td>${r.project}</td>
-      <td>${r.wp || '—'}</td>
-      <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" title="${r.task||''}">${r.task || '—'}</td>
-      <td class="mono">${ymLabel(r.start)}</td>
-      <td class="mono">${ymLabel(r.end)}</td>
-      <td class="num">${round2(r.totalHours)}</td>
-      <td class="actions">
-        <button class="btn btn-sm" onclick="editRecord('${r.id}')">Editar</button>
-        <button class="btn btn-sm" onclick="duplicateRecord('${r.id}')" title="Duplicar esta alocação">⧉</button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-document.getElementById('search').addEventListener('input', renderRecords);
-document.getElementById('filter-worker').addEventListener('change', renderRecords);
-document.getElementById('filter-project').addEventListener('change', renderRecords);
 
 
 // ════════════════════════════════════════════════════════════════════════
@@ -761,7 +700,6 @@ document.getElementById('btn-add-person').onclick = async () => {
   toast(`${name} adicionado`);
   renderEquipa();
   // Reset filtros para refletir nova pessoa
-  document.getElementById('filter-worker').innerHTML = '<option value="">Todas as pessoas</option>';
 };
 
 window.removePerson = async (name) => {
@@ -776,7 +714,6 @@ window.removePerson = async (name) => {
   await saveState();
   toast(`${name} removido`);
   renderEquipa();
-  document.getElementById('filter-worker').innerHTML = '<option value="">Todas as pessoas</option>';
 };
 
 // ════════════════════════════════════════════════════════════════════════

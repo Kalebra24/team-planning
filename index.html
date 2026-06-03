@@ -109,7 +109,7 @@
     <div class="header-nav">
       <nav class="tabs" id="tabs">
         <button class="active" data-view="dashboard">Dashboard</button>
-        <button data-view="alocacoes">Alocações</button>
+
         <button data-view="heatmap">Heatmap</button>
         <button data-view="gantt">Timeline</button>
         <button data-view="projetos">Por Projeto</button>
@@ -171,39 +171,6 @@
   </section>
 
   <!-- ═══════════ ALOCAÇÕES (CRUD) ═══════════ -->
-  <section class="view" id="view-alocacoes">
-    <div class="card">
-      <div class="card-head">
-        <div class="card-title">Registos de alocação</div>
-        <div class="card-sub"><span id="rec-count">0</span> registos</div>
-      </div>
-      <div class="toolbar">
-        <input type="search" id="search" placeholder="Procurar pessoa, projeto ou tarefa…">
-        <select id="filter-worker"><option value="">Todas as pessoas</option></select>
-        <select id="filter-project"><option value="">Todos os projetos</option></select>
-        <div class="spacer"></div>
-        <button class="btn btn-sm btn-danger" id="btn-clear">Limpar Tudo</button>
-      </div>
-      <div class="table-wrap">
-        <table class="data" id="table-records">
-          <thead>
-            <tr>
-              <th>Pessoa</th>
-              <th>Projeto</th>
-              <th>WP</th>
-              <th>Atividade</th>
-              <th>Início</th>
-              <th>Fim</th>
-              <th style="text-align:right">Horas</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
   <!-- ═══════════ HEATMAP ═══════════ -->
   <section class="view" id="view-heatmap">
     <div class="card">
@@ -1017,14 +984,6 @@
             <button type="button" id="rpt-person-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
           </label>
           <div id="rpt-person-list" style="max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
-        </div>
-        <div class="field">
-          <label>Detalhe de alocação</label>
-          <div class="seg" style="width:100%;margin-top:6px">
-            <button type="button" id="rpt-group-project" class="active" style="flex:1">Projecto</button>
-            <button type="button" id="rpt-group-wp"      style="flex:1">WP</button>
-            <button type="button" id="rpt-group-task"    style="flex:1">Tarefa</button>
-          </div>
         </div>
       </div>
 

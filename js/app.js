@@ -198,8 +198,7 @@ document.getElementById('btn-report-generate').onclick = () => {
   if (typeof _rptType !== 'undefined' && _rptType === 'person') {
     const workers  = [...document.querySelectorAll('#rpt-person-list input:checked')].map(el => el.value);
     const years    = [...document.querySelectorAll('#rpt-years-list input:checked')].map(el => parseInt(el.value, 10));
-    const groupBy  = typeof _rptGroup !== 'undefined' ? _rptGroup : 'project';
-    exportPersonReport({ workers, years, fullReport, groupBy });
+    exportPersonReport({ workers, years, fullReport });
   } else {
     const years = [...document.querySelectorAll('#rpt-proj-years-list input:checked')].map(el => parseInt(el.value, 10));
     const filterProjects = [...document.querySelectorAll('#rpt-project-list input:checked')].map(el => el.value);

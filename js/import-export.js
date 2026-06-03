@@ -165,8 +165,7 @@ function _rptCheckboxList(containerId, toggleBtnId, items, labelFn) {
   });
 }
 
-let _rptType  = 'project';
-let _rptGroup = 'project'; // 'project' | 'wp' | 'task'
+let _rptType = 'project';
 
 function openReportModal() {
   try {
@@ -220,18 +219,6 @@ function openReportModal() {
   document.getElementById('rpt-type-project').onclick = () => switchType('project');
   document.getElementById('rpt-type-person').onclick  = () => switchType('person');
   switchType(_rptType);
-
-  // GroupBy toggle wiring
-  const switchGroup = (g) => {
-    _rptGroup = g;
-    ['project', 'wp', 'task'].forEach(id =>
-      document.getElementById('rpt-group-' + id).classList.toggle('active', id === g)
-    );
-  };
-  document.getElementById('rpt-group-project').onclick = () => switchGroup('project');
-  document.getElementById('rpt-group-wp').onclick      = () => switchGroup('wp');
-  document.getElementById('rpt-group-task').onclick    = () => switchGroup('task');
-  switchGroup(_rptGroup);
 
   document.getElementById('modal-report').classList.add('active');
   } catch(err) { console.error('openReportModal:', err); toast('Erro ao abrir relatório: ' + err.message, 'error'); }
@@ -540,7 +527,7 @@ function exportMonthlyReport({ years: filterYears = [], filterProjects = [], ful
   toast('Relatório gerado — usa Ctrl+P para guardar PDF');
 }
 
-function exportPersonReport({ workers: filterWorkers = [], years: filterYears = [], fullReport = true, groupBy = 'project' } = {}) {
+function exportPersonReport({ workers: filterWorkers = [], years: filterYears = [], fullReport = true } = {}) {
   const now = new Date();
   const ML  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -566,25 +553,16 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
     }
   }
 
-  // Key function based on grouping level
-  const groupKey = r => {
-    const base = r.project;
-    if (groupBy === 'project') return base;
-    const withWP = base + (r.wp   ? ' · ' + r.wp   : '');
-    if (groupBy === 'wp')      return withWP;
-    return withWP + (r.task ? ' · ' + r.task : '');
-  };
-
-  // Breakdown per person: {worker: {key: {ym: hours}}}
+  // Breakdown per person: {worker: {project: {ym: hours}}}
   const ppProj = {};
   for (const w of workers) {
     ppProj[w] = {};
     for (const r of records.filter(r => r.worker === w)) {
-      const key = groupKey(r);
+      const key = r.project;
       if (!ppProj[w][key]) ppProj[w][key] = {};
       for (const ym of yms) {
         const h = r.monthsHours?.[ym] || 0;
-        if (h > 0) ppProj[w][key][ym] = (ppProj[w][key][ym] || 0) + h;
+        if (h > 0) ppProj[w][r.project][ym] = (ppProj[w][r.project][ym] || 0) + h;
       }
     }
   }
@@ -628,42 +606,59 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
 
   const h2 = label => '<div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:#8C8E8F;margin:20px 0 8px;padding-bottom:5px;border-bottom:1px solid #e8e4dc">' + label + '</div>';
 
-  // ── Allocation vs capacity bars per month ────────────────────────────
-  const allocCapBars = (w) => {
-    // Group months by year so we can add a year label when multiple years
-    const rows = years.flatMap(y => {
-      const ymsY = yms.filter(ym => ymParse(ym).y === y);
-      const yearHdr = years.length > 1
-        ? '<tr><td colspan="4" style="padding:4px 0 1px;font-size:7.5px;font-weight:800;color:#8B2638;letter-spacing:.08em;text-transform:uppercase">' + y + '</td></tr>'
-        : '';
-      const mthRows = ymsY.map(ym => {
-        const parsed = ymParse(ym);
-        const d = util[w][ym];
-        const vac = state.absences?.[w]?.[ym];
-        const barPct = d.cap > 0 ? Math.min(100, Math.round(d.pct * 100)) : 0;
-        const over   = d.cap > 0 && d.pct > 1;
-        const color  = hc(d.pct);
-        const pctLbl = d.cap > 0 ? Math.round(d.pct * 100) + '%' : '—';
-        const hrsLbl = d.cap > 0 ? Math.round(d.alloc) + '/' + d.cap + 'h' : (vac ? '✈' : '');
-        return '<tr>'
-          // Month label
-          + '<td style="padding:2px 5px 2px 0;font-size:8.5px;color:#555;white-space:nowrap">' + ML[parsed.m - 1] + '</td>'
-          // Bar track
-          + '<td style="width:100%;padding:2px 0">'
-          +   '<div style="position:relative;height:10px;background:#f2f0eb;border-radius:2px;overflow:visible">'
-          +     '<div style="position:absolute;left:0;top:0;height:100%;width:' + barPct + '%;background:' + color + ';border-radius:2px;min-width:' + (d.alloc > 0 ? 2 : 0) + 'px"></div>'
-          +     (over ? '<div style="position:absolute;left:100%;top:0;height:100%;width:' + Math.min(15, Math.round((d.pct - 1) * 100)) + '%;background:#8B2638;opacity:.5;border-radius:0 2px 2px 0"></div>' : '')
-          +   '</div>'
-          + '</td>'
-          // % label
-          + '<td style="padding:2px 0 2px 5px;font-size:8px;font-weight:700;color:' + (d.pct >= 1.10 ? '#8B2638' : d.pct >= 0.96 ? '#d97c10' : d.pct >= 0.76 ? '#2d7a4a' : '#8C8E8F') + ';white-space:nowrap;text-align:right">' + pctLbl + '</td>'
-          // hours label
-          + '<td style="padding:2px 0 2px 4px;font-size:7.5px;color:#8C8E8F;white-space:nowrap;text-align:right">' + hrsLbl + (vac && d.cap > 0 ? ' ✈' : '') + '</td>'
-          + '</tr>';
-      }).join('');
-      return yearHdr + mthRows;
+  // ── Allocation vs capacity line chart per person ─────────────────────
+  const allocLineSVG = (w) => {
+    const allocVals = yms.map(ym => util[w][ym].alloc);
+    const capVals   = yms.map(ym => util[w][ym].cap);
+    const maxVal    = Math.max(1, ...allocVals, ...capVals);
+    const W = 300, H = 80;
+    const PAD = { top: 10, right: 8, bottom: 22, left: 34 };
+    const cW = W - PAD.left - PAD.right;
+    const cH = H - PAD.top - PAD.bottom;
+    const xStep  = yms.length > 1 ? cW / (yms.length - 1) : cW;
+    const yScale = v => cH * (1 - v / (maxVal * 1.05));
+    const aPts   = allocVals.map((v, i) => [PAD.left + i * xStep, PAD.top + yScale(v)]);
+    const cPts   = capVals.map((v, i)   => [PAD.left + i * xStep, PAD.top + yScale(v)]);
+    const path   = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+
+    // Y axis ticks
+    let grid = '';
+    const tickStep = Math.ceil(maxVal * 1.05 / 3 / 50) * 50 || 50;
+    for (let v = 0; v <= maxVal * 1.1; v += tickStep) {
+      const y = PAD.top + yScale(v);
+      if (y < PAD.top - 2) break;
+      grid += '<line x1="' + PAD.left + '" x2="' + (W - PAD.right) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="#e8e4dc" stroke-width="1"/>';
+      grid += '<text x="' + (PAD.left - 3) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" font-size="7.5" fill="#8C8E8F">' + Math.round(v) + 'h</text>';
+    }
+
+    // X axis labels: month on every-other, year on Jan
+    const xLabels = yms.map((ym, i) => {
+      const parsed = ymParse(ym);
+      const x = (PAD.left + i * xStep).toFixed(1);
+      const y = H - 4;
+      if (yms.length <= 12 || i % 2 === 0) {
+        const lbl = (parsed.m === 1 || i === 0) ? ML[parsed.m - 1] + '\'' + String(parsed.y).slice(2) : ML[parsed.m - 1];
+        return '<text x="' + x + '" y="' + y + '" text-anchor="middle" font-size="7" fill="#8C8E8F">' + lbl + '</text>';
+      }
+      return '';
     }).join('');
-    return '<table style="width:100%;border-collapse:collapse;margin-top:8px">' + rows + '</table>';
+
+    // Dots on alloc line, coloured by utilization
+    const dots = aPts.map((p, i) => {
+      const pct = capVals[i] > 0 ? allocVals[i] / capVals[i] : 0;
+      const col = pct >= 1.10 ? '#8B2638' : pct >= 0.96 ? '#d97c10' : '#8B2638';
+      const vac = state.absences?.[w]?.[yms[i]];
+      return '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2.5" fill="' + col + '"/>'
+        + (vac ? '<text x="' + p[0].toFixed(1) + '" y="' + (p[1] - 5).toFixed(1) + '" text-anchor="middle" font-size="7" fill="#8C8E8F">✈</text>' : '');
+    }).join('');
+
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;height:auto;margin-top:8px">'
+      + grid
+      + '<path d="' + path(cPts) + '" fill="none" stroke="#8C8E8F" stroke-width="1.2" stroke-dasharray="4,3"/>'
+      + '<path d="' + path(aPts) + '" fill="none" stroke="#8B2638" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+      + dots
+      + xLabels
+      + '</svg>';
   };
 
   // ── Page 1: person summary cards ─────────────────────────────────────
@@ -682,7 +677,7 @@ function exportPersonReport({ workers: filterWorkers = [], years: filterYears = 
       + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + Math.round(totalH) + 'h</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Total horas</div></div>'
       + '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:#1a1917;line-height:1">' + projs.length + '</div><div style="font-size:7.5px;color:#8C8E8F;text-transform:uppercase;letter-spacing:.08em;margin-top:2px">Projectos</div></div>'
       + '</div>'
-      + allocCapBars(w)
+      + allocLineSVG(w)
       + (projs.length ? '<div style="font-size:8.5px;color:#8C8E8F;margin-top:8px;line-height:1.5">' + projs.slice(0, 4).join(', ') + (projs.length > 4 ? ' +' + (projs.length - 4) + ' …' : '') + '</div>' : '')
       + '</div>';
   }).join('');
