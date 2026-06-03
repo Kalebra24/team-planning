@@ -987,8 +987,11 @@
       <!-- project options -->
       <div id="rpt-opts-project" style="display:flex;flex-direction:column;gap:14px">
         <div class="field">
-          <label>Ano</label>
-          <select id="rpt-year" style="width:110px"></select>
+          <label style="display:flex;justify-content:space-between;align-items:baseline">
+            <span>Ano(s)</span>
+            <button type="button" id="rpt-proj-years-toggle-all" style="font-size:11px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0">Selecionar todos</button>
+          </label>
+          <div id="rpt-proj-years-list" style="max-height:80px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;padding:4px 0;margin-top:6px"></div>
         </div>
         <div class="field">
           <label style="display:flex;justify-content:space-between;align-items:baseline">

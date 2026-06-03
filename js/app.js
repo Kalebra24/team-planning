@@ -201,9 +201,9 @@ document.getElementById('btn-report-generate').onclick = () => {
     const groupBy  = typeof _rptGroup !== 'undefined' ? _rptGroup : 'project';
     exportPersonReport({ workers, years, fullReport, groupBy });
   } else {
-    const year = parseInt(document.getElementById('rpt-year').value, 10);
+    const years = [...document.querySelectorAll('#rpt-proj-years-list input:checked')].map(el => parseInt(el.value, 10));
     const filterProjects = [...document.querySelectorAll('#rpt-project-list input:checked')].map(el => el.value);
-    exportMonthlyReport({ year, filterProjects, fullReport });
+    exportMonthlyReport({ years, filterProjects, fullReport });
   }
 };
 

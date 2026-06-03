@@ -173,20 +173,19 @@ function openReportModal() {
   const curY = new Date().getFullYear();
   const allYears = getAllYears().length ? getAllYears() : [curY];
 
-  // Project report: year dropdown
-  const yearSel = document.getElementById('rpt-year');
-  yearSel.innerHTML = '';
-  allYears.slice().reverse().forEach(y => {
-    const o = document.createElement('option');
-    o.value = y; o.textContent = y;
-    if (y === curY) o.selected = true;
-    yearSel.appendChild(o);
-  });
+  // Project report: year checkboxes
+  _rptCheckboxList('rpt-proj-years-list', 'rpt-proj-years-toggle-all',
+    allYears.slice().reverse().map(y => ({ value: y })),
+    item => String(item.value)
+  );
+  // pre-check current year
+  const curYBox = document.querySelector('#rpt-proj-years-list input[value="' + curY + '"]');
+  if (curYBox) curYBox.checked = true;
 
-  // Project checkboxes
+  // Project checkboxes — value must be the project name
   _rptCheckboxList('rpt-project-list', 'rpt-project-toggle-all',
-    [...state.projects].sort((a, b) => a.name.localeCompare(b.name)),
-    p => p.name + (p.hidden ? ' <span style="font-size:10px;color:var(--ink-faint)">· oculto</span>' : '')
+    [...state.projects].sort((a, b) => a.name.localeCompare(b.name)).map(p => ({ value: p.name, hidden: p.hidden })),
+    item => item.value + (item.hidden ? ' <span style="font-size:10px;color:var(--ink-faint)">· oculto</span>' : '')
   );
 
   // Years checkboxes (person report)
@@ -238,13 +237,15 @@ function openReportModal() {
   } catch(err) { console.error('openReportModal:', err); toast('Erro ao abrir relatório: ' + err.message, 'error'); }
 }
 
-function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = {}) {
+function exportMonthlyReport({ years: filterYears = [], filterProjects = [], fullReport = true } = {}) {
   const now    = new Date();
-  const curY   = year || now.getFullYear();
   const ML     = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const yms    = Array.from({length: 12}, (_, i) => ymKey(curY, i + 1));
   const curM   = now.getMonth() + 1;
   const curYM  = ymKey(now.getFullYear(), curM);
+  const allDataYears = getAllYears().length ? getAllYears() : [now.getFullYear()];
+  const years  = (filterYears.length ? filterYears : [now.getFullYear()]).slice().sort((a, b) => a - b);
+  const yms    = years.flatMap(y => Array.from({length: 12}, (_, i) => ymKey(y, i + 1)));
+  const curY   = years[0]; // used for display labels when single year
 
   // Filter records by selected projects (empty = all visible)
   const records = filterProjects.length
@@ -357,7 +358,9 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
   const genTime = now.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'});
   const genUser = (typeof sessionCtx !== 'undefined' && sessionCtx)
     ? (sessionCtx.displayName || sessionCtx.initials || '—') : '—';
-  const periodLbl = 'Jan – Dez ' + curY;
+  const periodLbl = years.length === 1
+    ? 'Jan – Dez ' + years[0]
+    : ML[0] + ' ' + years[0] + ' – ' + ML[11] + ' ' + years[years.length - 1];
 
   // INEGI logo (inline SVG)
   const logoSVG = '<svg width="108" height="40" viewBox="0 0 108 40" xmlns="http://www.w3.org/2000/svg">'
@@ -372,7 +375,7 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
     + '<div style="display:flex;align-items:center;gap:14px">'
     + logoSVG
     + '<div><div style="font-size:14.5px;font-weight:800;color:#1a1917;letter-spacing:-0.3px">' + title + '</div>'
-    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">' + (filterProjects.length ? 'Projectos: ' + filterProjects.join(', ') : 'Todos os projectos') + ' &nbsp;·&nbsp; ' + curY + '</div></div></div>'
+    + '<div style="font-size:9px;color:#8C8E8F;margin-top:2px">' + (filterProjects.length ? 'Projectos: ' + filterProjects.join(', ') : 'Todos os projectos') + ' &nbsp;·&nbsp; ' + periodLbl + '</div></div></div>'
     + '<div style="text-align:right;font-size:9px;color:#8C8E8F;line-height:1.75">'
     + '<div>Gerado por <strong style="color:#444">' + genUser + '</strong></div>'
     + '<div>' + genDate + ', ' + genTime + '</div>'
@@ -468,7 +471,7 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
     + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'
     + kpiCard('Utilização média', avgUtil + '%', withCap.length + ' pessoa(s) com capacidade', kpiColor(avgUtil / 100))
     + kpiCard('Em risco', atRisk, 'sem trabalho nos próx. 3 meses', atRisk > 0 ? '#d97c10' : '#2d7a4a')
-    + kpiCard('Sobrealoções >110%', overMths, 'mês×pessoa em ' + curY, overMths > 0 ? '#8B2638' : '#2d7a4a')
+    + kpiCard('Sobrealoções >110%', overMths, 'mês×pessoa em ' + periodLbl, overMths > 0 ? '#8B2638' : '#2d7a4a')
     + kpiCard('Equipa', state.workers.length, state.projects.filter(p => p.active !== false).length + ' projecto(s) activos', '#444')
     + '</div>'
     + h2('Utilização por pessoa — ' + refLabel)
@@ -483,7 +486,7 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
   // Page 2 — Heatmap
   const page2 = fullReport ? '<div class="page">'
     + pageHeader('Heatmap de Utilização')
-    + h2('Pessoa × Mês — ' + curY)
+    + h2('Pessoa × Mês — ' + periodLbl)
     + '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">'
     + '<thead><tr><th style="padding:5px 10px 5px 0;font-size:9px;color:#8C8E8F"></th>' + hmHead
     + '<th style="padding:5px;text-align:center;font-size:9px;font-weight:700;color:#8C8E8F;background:#f2f0eb;border-left:2px solid #ccc">Média</th>'
@@ -494,7 +497,7 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
   // Page 3 — Project matrix
   const page3 = fullReport ? '<div class="page">'
     + pageHeader('Distribuição por Projecto')
-    + h2('Matriz Pessoa × Projecto — ' + curY)
+    + h2('Matriz Pessoa × Projecto — ' + periodLbl)
     + '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">'
     + '<thead><tr>'
     + '<th style="padding:4px 10px 4px 0;font-size:10px;color:#8C8E8F;position:sticky;left:0;background:#fff;z-index:3">Pessoa</th>'
@@ -510,7 +513,7 @@ function exportMonthlyReport({ year, filterProjects = [], fullReport = true } = 
     + '</div>' : '';
 
   const html = '<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">'
-    + '<title>Planeamento de Recursos · ' + curY + '</title>'
+    + '<title>Planeamento de Recursos · ' + periodLbl + '</title>'
     + '<style>'
     + '*{box-sizing:border-box;margin:0;padding:0}'
     + 'body{font-family:\'DIN Next LT Pro\',\'Segoe UI\',system-ui,Arial,sans-serif;color:#1a1917;background:#f0ede6;print-color-adjust:exact;-webkit-print-color-adjust:exact}'
