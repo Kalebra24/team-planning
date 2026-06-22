@@ -23,7 +23,6 @@
         <span class="sub">Equipa Processos · v1.0</span>
       </div>
       <div class="header-actions">
-      <button class="btn btn-sm" id="btn-install-pwa" style="display:none" title="Instalar aplicação no dispositivo">⬇ Instalar</button>
       <div class="checkin-pill" id="checkin-pill" title="Iniciar / terminar sessão de edição">
         <span class="ci-dot"></span>
         <span class="ci-label" id="checkin-label">Sem sessão</span>
@@ -1017,10 +1016,5 @@
 <script src="js/gantt.js"></script>
 <script src="js/import-export.js"></script>
 <script src="js/app.js"></script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-}
-</script>
 </body>
 </html>
