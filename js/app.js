@@ -329,3 +329,30 @@ function updatePresenceIndicator() {
   updatePresenceIndicator();
   renderDashboard();
 })();
+
+// ════════════════════════════════════════════════════════════════════════
+// PWA INSTALL
+// ════════════════════════════════════════════════════════════════════════
+(function initPwaInstall() {
+  let deferredPrompt = null;
+  const btn = document.getElementById('btn-install-pwa');
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.style.display = '';
+  });
+
+  btn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (outcome === 'accepted') btn.style.display = 'none';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    btn.style.display = 'none';
+  });
+})();
