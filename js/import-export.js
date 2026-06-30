@@ -2036,7 +2036,8 @@ document.getElementById('mf-confirm').onclick = async () => {
 // ════════════════════════════════════════════════════════════════════════
 // CLEAR
 // ════════════════════════════════════════════════════════════════════════
-document.getElementById('btn-clear').onclick = async () => {
+const _btnClear = document.getElementById('btn-clear');
+if (_btnClear) _btnClear.onclick = async () => {
   if (!guardEdit()) return;
   if (!confirm('Eliminar TODAS as alocações? (mantém pessoas, projetos e capacidades)')) return;
   autoBackup('Antes de Limpar Tudo');

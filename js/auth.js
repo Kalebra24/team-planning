@@ -64,8 +64,14 @@ async function doCheckIn(username, displayName) {
   await showChangelogModal(prevSession?.checked_out_at || null, username);
 }
 
-// "Entrar" — redireciona para login GitLab da empresa
+// "Entrar" — redireciona para login GitLab da empresa (ou modo local em localhost)
 async function checkIn() {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    const initials = window.prompt('Modo local — introduz as tuas iniciais (ex: jsilva):');
+    if (!initials || !initials.trim()) return;
+    await beginSession(initials.trim().toLowerCase(), initials.trim());
+    return;
+  }
   await OAUTH.login();
 }
 
