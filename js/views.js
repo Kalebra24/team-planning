@@ -726,7 +726,7 @@ function openModal(record) {
   // Reset to hours mode
   _allocUnit = 'h';
   document.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b.dataset.unit === 'h'));
-  document.getElementById('f-hours').step = '0.5';
+  document.getElementById('f-hours').step = 'any';
   document.getElementById('months-unit-label').textContent = 'Horas';
 
   document.getElementById('modal-title').textContent = record ? 'Editar alocação' : 'Nova alocação';
@@ -824,7 +824,7 @@ function buildMonthsEditor(existing) {
     const v = isPM ? (cap > 0 ? round2(hVal / cap) : 0) : hVal;
     return `<div class="month-cell">
       <label>${ymLabel(ym)}</label>
-      <input type="number" min="0" step="${isPM ? 'any' : '0.5'}" data-ym="${ym}" value="${v}" class="month-input">
+      <input type="number" min="0" step="any" data-ym="${ym}" value="${v}" class="month-input">
     </div>`;
   }).join('');
   document.getElementById('months-editor').innerHTML = html;
@@ -870,7 +870,7 @@ document.querySelectorAll('.unit-btn').forEach(btn => {
       document.getElementById('months-unit-label').textContent = 'PM';
     } else {
       document.getElementById('f-hours').value = round2(oldV * cap);
-      document.getElementById('f-hours').step = '0.5';
+      document.getElementById('f-hours').step = 'any';
       document.getElementById('months-unit-label').textContent = 'Horas';
     }
     buildMonthsEditor(null);
