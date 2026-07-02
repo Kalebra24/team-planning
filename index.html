@@ -221,8 +221,10 @@
         </div>
         <select id="gantt-quick">
           <option value="">Atalhos rápidos…</option>
-          <option value="next-12">Próximos 12 meses</option>
           <option value="next-6">Próximos 6 meses</option>
+          <option value="next-12">Próximos 12 meses</option>
+          <option value="next-24">Próximos 24 meses</option>
+          <option value="next-36">Próximos 36 meses</option>
           <option value="ytd">Ano atual (jan→dez)</option>
         </select>
       </div>
@@ -611,6 +613,20 @@
       <button type="button" class="btn btn-danger" id="redist-cancel" style="text-align:left; padding:10px 16px; margin-top:4px">
         Cancelar (reverter)
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: SELECIONAR ALOCAÇÃO (barra agrupada WP/Projecto) ═══════════ -->
+<div class="modal-bg" id="modal-group-pick">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <div class="modal-title">Selecionar alocação a editar</div>
+    </div>
+    <p style="margin-bottom:14px; font-size:13px; color:var(--ink-soft)">Esta barra agrega várias alocações. Escolhe qual queres editar:</p>
+    <div id="group-pick-list" style="display:flex; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto"></div>
+    <div style="display:flex; justify-content:flex-end; margin-top:16px; padding-top:14px; border-top:1px solid var(--line-soft)">
+      <button type="button" class="btn" id="group-pick-cancel">Cancelar</button>
     </div>
   </div>
 </div>

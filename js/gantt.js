@@ -61,6 +61,13 @@ const dragState = {
   redrawFn: null,
 };
 
+// Em modo mensal, o pointerdown no handle de resize captura o ponteiro no
+// elemento .gantt-bar; isso faz o "click" sintético subsequente ser disparado
+// com target = bar (não o handle), pelo que não dá para distinguir esse click
+// via e.target.closest(). Esta flag suprime esse click fantasma após um
+// resize, evitando que o editor manual abra por cima do diálogo de distribuição.
+let suppressNextBarClick = false;
+
 function attachBarInteractions(bar, ymsRange, _yearUnused, redrawFn) {
   bar.addEventListener('pointerdown', (e) => onBarPointerDown(e, bar, ymsRange, redrawFn));
 }
@@ -96,6 +103,7 @@ function onBarPointerDown(e, bar, ymsRange, redrawFn) {
   dragState.curWorker = rec.worker;
   dragState.movedThreshold = false;
   dragState.redrawFn = redrawFn;
+  if (isMonthlyMode) suppressNextBarClick = true;
 
   // Indexes iniciais a partir do pct (relativos ao range visível)
   dragState.origStartIdx = Math.round((dragState.startLeftPct / 100) * nCols);
@@ -381,6 +389,45 @@ const ganttRange = { from: null, to: null };
 const ganttView = { mode: 'compact', unit: 'pm' };  // unit: 'pm' | 'h'
 // Agrupamento: 'task' = por registo (default), 'wp' = por projecto·WP, 'project' = por projecto
 let ganttGroupBy = 'task';
+// Grupos agregados (WP/Projecto) do último draw(), indexados para permitir localizar
+// os registos originais a partir do índice gravado em data-grp-idx da barra
+let ganttGroupedRecords = [];
+
+// Modal de escolha de alocação quando se clica numa barra agregada (nível WP/Projecto)
+function openGroupPickDialog(grp) {
+  const records = grp._records || [];
+  if (records.length === 0) return;
+  if (records.length === 1) { openModal(records[0]); return; }
+  const modal = document.getElementById('modal-group-pick');
+  const list = document.getElementById('group-pick-list');
+  list.innerHTML = records.map((r, i) => {
+    let totalPM = 0, totalH = 0;
+    for (const [ym, h] of Object.entries(r.monthsHours)) {
+      const cap = getCapacity(r.worker, ym);
+      if (cap > 0) totalPM += h / cap;
+      totalH += h;
+    }
+    const label = [r.project, r.wp, r.task].filter(Boolean).join(' · ');
+    return `<button type="button" class="btn" data-pick-idx="${i}" style="text-align:left; padding:10px 14px; display:flex; flex-direction:column; gap:2px; align-items:flex-start">
+      <strong style="font-size:13px">${label}</strong>
+      <span style="font-size:11px; color:var(--ink-faint)">${ymLabel(r.start)} → ${ymLabel(r.end)} · ${totalPM.toFixed(2)} PM · ${round2(totalH)}h</span>
+    </button>`;
+  }).join('');
+  modal.classList.add('active');
+  const cleanup = () => {
+    modal.classList.remove('active');
+    list.querySelectorAll('button').forEach(b => b.onclick = null);
+    document.getElementById('group-pick-cancel').onclick = null;
+  };
+  list.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      const i = parseInt(b.dataset.pickIdx, 10);
+      cleanup();
+      openModal(records[i]);
+    };
+  });
+  document.getElementById('group-pick-cancel').onclick = cleanup;
+}
 
 function defaultGanttRange() {
   // Se há registos, range = min/max dos meses com horas, limitado a ~24 meses
@@ -657,6 +704,7 @@ function renderGantt() {
       }
       drawRecords = Object.values(groups);
     }
+    ganttGroupedRecords = ganttGroupBy !== 'task' ? drawRecords : [];
 
     // Info do filtro
     const totalInRange = state.records.filter(r => !hiddenProjects.has(r.project) && ymsRange.some(ym => r.monthsHours[ym])).length;
@@ -752,13 +800,15 @@ function renderGantt() {
         }
         const pmDisplay = pmRange.toFixed(2);
         const label = `${r.project}${r.wp ? ' · '+r.wp : ''}`;
+        const isGrouped = !!r._grouped;
         const tipBase = `${r.project}${r.wp?' / '+r.wp:''}${r.task?'\n'+r.task:''}\n${ymLabel(monthsActive[0])} → ${ymLabel(monthsActive[monthsActive.length-1])}\n${round2(hRange)}h no intervalo · ${pmDisplay} PM\nTotal registo: ${round2(totalH)}h · ${totalPM.toFixed(2)} PM`;
-        const tip = isMonthly
-          ? tipBase + '\n\nEdita os valores diretamente em cada mês'
-          : tipBase + '\n\nArrasta para mover/redimensionar · clica para editar';
+        const tip = isGrouped
+          ? tipBase + `\n\n${(r._records||[]).length} alocação(ões) agregada(s) · clica para editar`
+          : (isMonthly
+            ? tipBase + '\n\nEdita os valores diretamente em cada mês'
+            : tipBase + '\n\nArrasta para mover/redimensionar · clica para editar');
         const hideName = width < 8;
         const safeWr = r.worker.replace(/"/g,'&quot;');
-        const isGrouped = !!r._grouped;
 
         let barInner;
         if (isGrouped) {
@@ -788,8 +838,8 @@ function renderGantt() {
             <div class="gb-handle gb-h-right" data-handle="right"></div>`;
         }
 
-        const barDataId = isGrouped ? '' : `data-id="${r.id}"`;
-        const barStyle = `left:${left}%; width:${width}%; background:${colorFor(r.project)}${isGrouped ? ';opacity:0.88;cursor:default' : ''}`;
+        const barDataId = isGrouped ? `data-grp-idx="${ganttGroupedRecords.indexOf(r)}"` : `data-id="${r.id}"`;
+        const barStyle = `left:${left}%; width:${width}%; background:${colorFor(r.project)}${isGrouped ? ';opacity:0.88;cursor:pointer' : ''}`;
         html += `<div class="gantt-row"><div class="gantt-label">${r.project}${r.wp ? ' · ' + r.wp : ''}</div>
           <div class="gantt-track" data-worker="${safeWr}" style="--cols:${nCols}">
             <div class="gantt-bar" ${barDataId} style="${barStyle}" title="${tip.replace(/"/g,'&quot;')}">
@@ -808,13 +858,23 @@ function renderGantt() {
         attachBarInteractions(bar, ymsRange, null, draw);
         bar.addEventListener('click', e => {
           if (e.target.closest('input, .gb-month-cell, .gb-month-resize')) return;
+          if (suppressNextBarClick) { suppressNextBarClick = false; return; }
           const rec = state.records.find(x => x.id === bar.dataset.id);
           if (rec) openModal(rec);
         });
       });
     } else {
       document.querySelectorAll('#gantt-wrap .gantt-bar').forEach(bar => {
-        if (!bar.dataset.id) return; // grouped bar — no interactions
+        if (bar.dataset.grpIdx !== undefined) {
+          // Barra agregada (nível WP/Projecto): sem drag, só clique para escolher/editar
+          bar.addEventListener('click', () => {
+            if (!guardEdit()) return;
+            const grp = ganttGroupedRecords[parseInt(bar.dataset.grpIdx, 10)];
+            if (grp) openGroupPickDialog(grp);
+          });
+          return;
+        }
+        if (!bar.dataset.id) return;
         attachBarInteractions(bar, ymsRange, null, draw);
       });
     }
@@ -858,6 +918,12 @@ function renderGantt() {
     } else if (v === 'next-6') {
       ganttRange.from = thisYM;
       ganttRange.to = ymAddMonths(thisYM, 5);
+    } else if (v === 'next-24') {
+      ganttRange.from = thisYM;
+      ganttRange.to = ymAddMonths(thisYM, 23);
+    } else if (v === 'next-36') {
+      ganttRange.from = thisYM;
+      ganttRange.to = ymAddMonths(thisYM, 35);
     } else if (v === 'ytd') {
       ganttRange.from = ymKey(now.getFullYear(), 1);
       ganttRange.to = ymKey(now.getFullYear(), 12);
